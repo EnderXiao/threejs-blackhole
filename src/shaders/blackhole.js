@@ -249,24 +249,27 @@ void main() {
   float spAng = atan(dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]),
                      dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]));
   float aS = clamp(uSpin, 0.0, 0.998);
-  // Smooth Kerr-ish critical curve: slightly elliptical + offset (no limaçon bite)
+  // Kerr D-shape: circle clipped by a chord on the frame-dragging side
+  // (Bardeen+ 1972). NOT an ellipse — one side is genuinely flat.
   float rel = soAng - spAng;
   float c = cos(rel);
   float sn = sin(rel);
-  // semi-axes in impact-parameter space
-  float ax = 5.196 * (1.0 - 0.32 * aS);   // along spin: clearly flatter (D)
-  float ay = 5.196 * (1.0 + 0.10 * aS);
-  // ellipse centered with a small spin offset
-  vec2 e = vec2(bImp * c + 0.85 * aS, bImp * sn);
-  float ell = (e.x * e.x) / (ax * ax) + (e.y * e.y) / (ay * ay);
-  bool inside = ell < 1.0;
-  // radial b_c along current ray direction (for the photon ring)
-  float bCrit = length(vec2(ax * c - 0.55 * aS, ay * sn));
+  float R = 5.196;
+  // impact-plane coords (spin along +x after this basis)
+  vec2 p = vec2(bImp * c + 0.55 * aS, bImp * sn);
+  // chord: flat side advances toward center as a grows
+  float chord = -R * (1.0 - 0.62 * aS);
+  float circleSdf = length(p) - R * (1.0 - 0.05 * aS * aS);
+  float planeSdf = chord - p.x;          // <0 when to the right of the chord
+  float dSdf = max(circleSdf, planeSdf); // intersection = D
+  bool inside = dSdf < 0.0;
+  float ell = clamp(0.5 - dSdf * 0.25, 0.0, 1.5); // reuse name for ring falloff
+  float bCrit = length(p);
 
 
   // Photon ring lives on the SAME ellipse as the shadow (ell = 1).
-  float ring = exp(-pow((1.0 - ell) / 0.1, 2.0));
-  float ringCore = exp(-pow((1.0 - ell) / 0.03, 2.0));
+  float ring = exp(-pow(dSdf / 0.4, 2.0));
+  float ringCore = exp(-pow(dSdf / 0.12, 2.0));
   vec3 ringCol = mix(vec3(1.0, 0.9, 0.72), vec3(1.0, 0.98, 0.92), ringCore);
 
   if (inside) {
