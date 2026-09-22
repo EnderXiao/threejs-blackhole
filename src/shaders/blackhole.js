@@ -249,8 +249,23 @@ void main() {
     col += vec3(0.42, 0.34, 0.26) * haze;
   }
 
-  // whisper of warm bleed at the critical curve (not a hard photon-ring band)
-  float bleed = exp(-pow((minR - (2.9 + uSpin * 0.15)) / 0.9, 2.0)) * 0.04;
+  // ---------- Photon ring (critical curve) ----------
+  // Thin bright annulus of light that orbited near the photon sphere.
+  // Width is FIXED (does not grow with uSteps). n=1 is brightest; a fainter
+  // n=2 sub-ring sits just inside (higher-order images are thinner/dimmer).
+  float rPh = 2.85 - 0.28 * uSpin;
+  float ring1 = exp(-pow((minR - rPh) / 0.08, 2.0));          // n≈1, sharp
+  float ring2 = exp(-pow((minR - rPh * 0.92) / 0.04, 2.0));   // n≈2, thinner
+  if (!captured) {
+    col += vec3(1.0, 0.93, 0.72) * (ring1 * 2.4 + ring2 * 1.1);
+  } else {
+    // rim of the shadow: last light before capture
+    float sil = exp(-pow((minR - capture * 1.15) / 0.1, 2.0));
+    col += vec3(1.0, 0.9, 0.68) * sil * 1.8;
+  }
+
+  // whisper of warm bleed around the critical curve
+  float bleed = exp(-pow((minR - rPh) / 0.7, 2.0)) * 0.05;
   col += vec3(0.55, 0.42, 0.28) * bleed;
 
   vec2 q = vUv - 0.5;
