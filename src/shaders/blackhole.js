@@ -147,6 +147,14 @@ void main() {
 
   float capture = rPlus() * 1.05;
 
+  // Critical curve: shadow {b < b_c} and photon ring {b ≈ b_c} are THE SAME outline.
+  // b = |x × v| asymptotic impact parameter; b_c = 3√3 M (Schw.) with mild Kerr D-shape.
+  vec3 bvec = cross(uCamPos, dir);
+  float bImp = length(bvec);
+  float skyPhi = atan(dir.z, dir.x);
+  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.08 * uSpin) + 0.55 * uSpin * cos(skyPhi);
+  bool inShadowDisk = bImp < bCrit;
+
   float ci = cos(-uIncl);
   float si = sin(-uIncl);
   mat3 rotX = mat3(1.0, 0.0, 0.0,  0.0, ci, si,  0.0, -si, ci);
@@ -228,49 +236,33 @@ void main() {
   }
 
   if (!captured && !escaped) {
-    // only the horizon captures; leftover near-miss rays escape and sample sky/disk
     if (length(pos) < capture * 1.15) captured = true;
     else escaped = true;
   }
+  // Physical shadow = critical impact-parameter disk (b < b_c), not merely r < r₊
+  if (inShadowDisk && hitCount == 0) captured = true;
 
-  // ---------- Shadow (soft / 朦胧) ----------
-  // Keep any foreground disk hits so the near plate can wrap over the silhouette.
+  // ---------- Shadow (soft) ----------
   if (captured) {
     if (hitCount == 0) {
-      // warm olive void (not a pure cutout)
       col = vec3(0.03, 0.028, 0.022);
     }
-    // narrow feather right at the silhouette (not a wide gray moat)
-    float edge = smoothstep(capture * 0.98, capture * 1.25, minR);
-    col = mix(col * 0.55, col, edge);
+    // feather across the SAME critical curve used for the ring
+    float edge = smoothstep(bCrit - 0.05, bCrit + 0.35, bImp);
+    col = mix(col * 0.5, col, edge);
   } else {
     col += starfield(normalize(pos)) * 0.85;
-    // atmospheric haze just outside the hole
-    float haze = exp(-max(0.0, minR - capture) * 0.28) * 0.06;
+    float haze = exp(-max(0.0, bImp - bCrit) * 1.5) * 0.06;
     col += vec3(0.42, 0.34, 0.26) * haze;
   }
 
-  // ---------- Photon ring = SAME critical curve as the shadow ----------
-  // Gralla–Holz–Wald 2019 / Johannsen 2013: the photon ring traces the
-  // photon-capture critical curve — identical outline to the shadow, including
-  // Kerr D-shape / offset at high spin (Bardeen+ 1972). Not a free circle.
-  float rPh = 2.85 - 0.28 * uSpin;
-  // graze the photon sphere AND sit on the capture boundary
-  float grazePh = exp(-pow((minR - rPh) / 0.1, 2.0));
-  float onCaptureEdge = exp(-pow((minR - capture * 1.35) / 0.35, 2.0));
-  float ring = grazePh * (0.35 + 0.65 * onCaptureEdge);
-  // slightly stronger where the ray barely escaped (outer rim of critical curve)
-  if (!captured) {
-    col += vec3(1.0, 0.93, 0.72) * ring * 2.6;
-  } else {
-    // inner rim of the same critical curve
-    float sil = exp(-pow((minR - capture * 1.2) / 0.12, 2.0));
-    col += vec3(1.0, 0.9, 0.68) * sil * 2.0;
-  }
-
-  // warm bleed shared by both sides of the critical curve
-  float bleed = exp(-pow((minR - max(rPh, capture * 1.25)) / 0.55, 2.0)) * 0.05;
-  col += vec3(0.55, 0.42, 0.28) * bleed;
+  // ---------- Photon ring on the critical curve b ≈ b_c ----------
+  // Gralla–Holz–Wald 2019: ring traces the capture critical curve (same outline).
+  float db = abs(bImp - bCrit);
+  float ring = exp(-pow(db / 0.2, 2.0));
+  float ring2 = exp(-pow((bImp - (bCrit - 0.32)) / 0.07, 2.0));
+  col += vec3(1.0, 0.93, 0.72) * (ring * 2.8 + ring2 * 0.9);
+  col += vec3(0.55, 0.42, 0.28) * exp(-pow(db / 0.65, 2.0)) * 0.06;
 
   vec2 q = vUv - 0.5;
   col *= 1.0 - 0.08 * dot(q, q);
