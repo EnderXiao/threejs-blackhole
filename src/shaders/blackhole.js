@@ -264,11 +264,10 @@ void main() {
   float bCrit = length(vec2(ax * c - 0.55 * aS, ay * sn));
 
 
-  vec3 ringCol = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 0.98, 0.92), ringCore);
-  // ring on the same elliptical critical curve
-  float edge = 1.0 - sqrt(max(ell, 0.0)); // 0 on boundary, 1 at center
+  // ring on the same elliptical critical curve (declare before use)
   float ring = exp(-pow((1.0 - ell) / 0.08, 2.0));
   float ringCore = exp(-pow((1.0 - ell) / 0.025, 2.0));
+  vec3 ringCol = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 0.98, 0.92), ringCore);
 
   if (inside) {
     // 前景盘只允许很淡地压在轮廓附近，避免横条盖满阴影
