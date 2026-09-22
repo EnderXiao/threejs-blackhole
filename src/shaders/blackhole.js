@@ -151,21 +151,26 @@ void main() {
   // b = |x × v| asymptotic impact parameter; b_c = 3√3 M (Schw.) with mild Kerr D-shape.
   vec3 bvec = cross(uCamPos, dir);
   float bImp = length(bvec);
-  // Sky polar angle around the BH in the camera plane + spin-axis projection.
-  // Kerr critical curve is D-shaped / offset along the frame-dragging side
-  // (Bardeen+ 1972; Gralla–Holz–Wald 2019). MUST vary across the image.
-  // Screen polar angle of the ray relative to the BH direction (not world azimuth).
+
+  // Screen-frame azimuth around the BH (spin → camera-up component)
   vec3 toB = normalize(-uCamPos);
   vec3 dperp = dir - toB * dot(dir, toB);
-  vec2 off = vec2(dot(dperp, uCamBasis[0]), dot(dperp, uCamBasis[1]));
-  vec2 soDir = (length(off) > 1e-5) ? normalize(off) : vec2(1.0, 0.0);
-  vec2 sp2 = vec2(dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]), dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]));
-  sp2 = (length(sp2) > 1e-5) ? normalize(sp2) : vec2(0.0, 1.0);
-  float cSpin = dot(soDir, sp2); // +1 自旋投影正侧，-1 负侧
-  // Kerr 临界曲线：沿自旋一侧压扁并偏移（D 形），幅度要够大才看得出来
-  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.1 * uSpin * uSpin)
-              + 1.45 * uSpin * cSpin
-              + 0.35 * uSpin * (cSpin * cSpin - 0.5); // 轻度二阶不对称
+  float sx = dot(dperp, uCamBasis[0]);
+  float sy = dot(dperp, uCamBasis[1]);
+  float soAng = atan(sy, sx);                         // screen polar angle
+  float spx = dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]); // spin on screen
+  float spy = dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]);
+  float spAng = atan(spy, spx);                       // spin projection angle
+  float rel = soAng - spAng;                          // 0 = 自旋正侧
+
+  // Kerr critical curve (shared by shadow + photon ring):
+  // circle + strong D-flatten/offset along spin (Bardeen+ 1972)
+  float bc0 = 3.0 * sqrt(3.0); // 5.196
+  float bCrit = bc0
+              + 1.8 * uSpin * cos(rel)          // 偏移 / 一侧变大
+              - 1.1 * uSpin * cos(rel) * cos(rel) // 压扁（D 形）
+              + 0.25 * uSpin * cos(2.0 * rel);
+  bCrit = max(bCrit, 2.5);
   bool inShadowDisk = bImp < bCrit;
 
   float ci = cos(-uIncl);
@@ -271,11 +276,11 @@ void main() {
   }
 
   // ---------- Photon ring: THIN bright line ON b = b_c ----------
-  float db = abs(bImp - bCrit);
-  float ring = exp(-pow(db / 0.06, 2.0));   // ~σ=0.06 → hairline
-  col += vec3(1.0, 0.93, 0.72) * ring * 2.2;
-  // faint n=2 just inside
-  col += vec3(1.0, 0.9, 0.7) * exp(-pow((bImp - (bCrit - 0.12)) / 0.03, 2.0)) * 0.7;
+  // hairline ON the critical curve (same bCrit as the shadow boundary)
+  float db = bImp - bCrit;
+  float ring = exp(-pow(db / 0.05, 2.0));
+  col += vec3(1.0, 0.93, 0.72) * ring * 2.4;
+  col += vec3(1.0, 0.9, 0.7) * exp(-pow((db + 0.1) / 0.03, 2.0)) * 0.55;
 
   vec2 q = vUv - 0.5;
   col *= 1.0 - 0.08 * dot(q, q);
