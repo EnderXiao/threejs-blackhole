@@ -1,0 +1,20 @@
+dist/index.html
+  h_1edca6cb63ac1c 8
+src/main.js
+  h_1edca6cb63ac1c 154
+src/scene/MatterField.js
+  h_1edca6cb63ac1c 5-7,10,14-16,31,34,36,38,52,59,61-81,85-86,93-94,104-107,127-128,133,140,142,145-147,150-151,153,174-182
+src/shaders/blackhole.js
+  h_1edca6cb63ac1c 10-12,25,44-48,68,76-93,98-99,102,104-109,111,114-115,117-118,120-121,123,135,148,158,160,162,166,171-174,176,178,188-189,191-195,201,212,217-218,231,235-236,238-244,246-249,252-254,257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c3c759fe9e4ef2733407c10410b554a1f594901d",
+  "prompts": {},
+  "humans": {
+    "h_1edca6cb63ac1c": {
+      "author": "xiaoganyun <xiaoganyun@xiaomi.com>"
+    }
+  }
+}
