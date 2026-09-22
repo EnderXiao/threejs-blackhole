@@ -46,7 +46,7 @@ const quad = new THREE.Mesh(
 quadScene.add(quad);
 
 // Matter particles live in a normal perspective scene overlaid after the quad
-const matter = new MatterField(9000);
+const matter = new MatterField(16000);
 scene.add(matter.points);
 
 const hud = new HUD();
@@ -132,6 +132,7 @@ function frame(now) {
   uniforms.uCamPos.value.copy(camera.object.position);
   uniforms.uCamBasis.value.copy(camera.getBasisMatrix());
   uniforms.uFov.value = (camera.object.fov * Math.PI) / 180;
+  matter.setCameraPosition(camera.object.position);
 
   hud.updateReadout(camera.object.position, state.spin);
 
