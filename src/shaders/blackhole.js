@@ -142,10 +142,6 @@ void main() {
   float tanF = tan(uFov * 0.5);
   vec3 dir = normalize(uCamBasis[2] + uCamBasis[0] * (uv.x * tanF) + uCamBasis[1] * (uv.y * tanF));
 
-  vec3 pos = uCamPos;
-  vec3 vel = dir;
-
-  float capture = rPlus() * 1.05;
 
   // Critical curve: shadow {b < b_c} and photon ring {b ≈ b_c} are THE SAME outline.
   // b = |x × v| asymptotic impact parameter; b_c = 3√3 M (Schw.) with mild Kerr D-shape.
