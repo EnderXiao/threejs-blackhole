@@ -249,22 +249,28 @@ void main() {
   float spAng = atan(dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]),
                      dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]));
   float aS = clamp(uSpin, 0.0, 0.998);
-  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.03 * aS * aS)
-              + 0.5 * aS * cos(soAng - spAng);
+  // Kerr D-shape: clearly visible at high spin (Bardeen+ 1972)
+  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.08 * aS * aS)
+              + 1.2 * aS * cos(soAng - spAng)
+              - 0.55 * aS * cos(2.0 * (soAng - spAng));
+  bCrit = max(bCrit, 2.8);
   bool inside = bImp < bCrit;
 
   float db = bImp - bCrit;
   float ring = exp(-pow(db / 0.5, 2.0));          // thick soft photon-ring glow
   float ringCore = exp(-pow(db / 0.18, 2.0));     // brighter core of the ring
 
+  vec3 ringCol = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 0.98, 0.92), ringCore);
   if (inside) {
-    col = vec3(0.0);
-    // ring still bleeds slightly onto the inner edge of the silhouette
+    // 近侧前景盘可以压在阴影上，而不是被黑洞涂黑
+    if (hitCount > 0) {
+      col = disk;
+    } else {
+      col = vec3(0.0);
+    }
     col += vec3(1.0, 0.93, 0.78) * exp(-pow((bCrit - bImp) / 0.15, 2.0)) * 0.55;
   } else {
     col = disk + sky;
-    // PHOTON RING (this band must be bright — not a dark moat)
-    vec3 ringCol = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 0.98, 0.92), ringCore);
     col += ringCol * (ring * 2.4 + ringCore * 1.6);
   }
 
