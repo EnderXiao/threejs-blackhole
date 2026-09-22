@@ -1,0 +1,26 @@
+dist/index.html
+  h_1edca6cb63ac1c 8-9
+src/camera/FreeCamera.js
+  h_1edca6cb63ac1c 50-53
+src/main.js
+  h_1edca6cb63ac1c 49,83,86-93,96-99
+src/scene/MatterField.js
+  h_1edca6cb63ac1c 94
+src/shaders/blackhole.js
+  h_1edca6cb63ac1c 215-216,256-258,260-266,268,271-274,276,279-282,284,287-288
+src/styles.css
+  h_1edca6cb63ac1c 206-211
+src/ui/HUD.js
+  h_1edca6cb63ac1c 61-80,82,84-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "a1cc8953cec11f4c048995402a2945aef4e7719a",
+  "prompts": {},
+  "humans": {
+    "h_1edca6cb63ac1c": {
+      "author": "xiaoganyun <xiaoganyun@xiaomi.com>"
+    }
+  }
+}
