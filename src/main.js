@@ -151,7 +151,7 @@ function frame(now) {
   uniforms.uCamPos.value.copy(camera.object.position);
   uniforms.uCamBasis.value.copy(camera.getBasisMatrix());
   uniforms.uFov.value = (camera.object.fov * Math.PI) / 180;
-  matter.setCameraPosition(camera.object.position);
+  if (matter.setCameraPosition) matter.setCameraPosition(camera.object.position);
 
   hud.updateReadout(camera.object.position, state.spin);
 

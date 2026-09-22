@@ -7,12 +7,9 @@ void main() {
 `;
 
 /**
- * Kerr-inspired null-geodesic raytracer.
- *
- *   a = −1.5 (x×v)² x / r⁵  +  2 v × B_g ,  B_g ~ Kerr gravitomagnetic dipole
- *
- * Thin Keplerian accretion disk + Doppler beaming + gravitational redshift.
- * Trapped (photon-sphere) rays are classified as captured so the shadow stays black.
+ * Kerr-inspired null-geodesic raytracer (stable Cartesian form + frame dragging).
+ * Photon ring / secondary image emerge from bent paths hitting the disk.
+ * Disk uses relativistic g-factor (Doppler + gravitational redshift).
  */
 export const blackholeFrag = /* glsl */ `
 precision highp float;
@@ -25,7 +22,7 @@ uniform float uSpin;
 uniform vec3 uCamPos;
 uniform mat3 uCamBasis;
 uniform float uFov;
-uniform int uSteps;
+uniform float uSteps;
 uniform float uIncl;
 uniform bool uShowGrid;
 uniform float uTimeScale;
@@ -44,12 +41,11 @@ float rIsco() {
 
 vec3 tempRGB(float t) {
   t = clamp(t, 0.0, 1.0);
-  // iron-hot palette
-  vec3 c0 = vec3(0.35, 0.03, 0.02);
-  vec3 c1 = vec3(0.95, 0.2, 0.04);
-  vec3 c2 = vec3(1.0, 0.55, 0.12);
-  vec3 c3 = vec3(1.0, 0.88, 0.55);
-  vec3 c4 = vec3(1.0, 0.98, 0.9);
+  vec3 c0 = vec3(0.4, 0.04, 0.02);
+  vec3 c1 = vec3(0.95, 0.22, 0.04);
+  vec3 c2 = vec3(1.0, 0.6, 0.14);
+  vec3 c3 = vec3(1.0, 0.9, 0.65);
+  vec3 c4 = vec3(1.0, 0.97, 0.9);
   if (t < 0.25) return mix(c0, c1, t / 0.25);
   if (t < 0.55) return mix(c1, c2, (t - 0.25) / 0.3);
   if (t < 0.85) return mix(c2, c3, (t - 0.55) / 0.3);
@@ -61,7 +57,6 @@ vec3 starfield(vec3 dir) {
   vec3 col = vec3(0.002, 0.003, 0.007);
   float band = exp(-pow(d.y * 1.2 + 0.08, 2.0) * 2.0);
   col += vec3(0.008, 0.012, 0.022) * band;
-
   for (int i = 0; i < 3; i++) {
     float scale = 50.0 + float(i) * 80.0;
     vec3 gp = d * scale + float(i) * 11.1;
@@ -70,7 +65,7 @@ vec3 starfield(vec3 dir) {
     float n = fract(sin(dot(id, vec3(127.1, 311.7, 74.7))) * 43758.5453);
     if (n < 0.8) continue;
     float n2 = fract(n * 39.3);
-    float star = smoothstep(0.22, 0.0, length(f));
+    float star = smoothstep(0.2, 0.0, length(f));
     float br = (n2 - 0.8) / 0.2;
     vec3 tint = mix(vec3(0.65, 0.78, 1.0), vec3(1.0, 0.78, 0.55), fract(n2 * 5.1));
     col += tint * star * br * (0.5 - 0.08 * float(i));
@@ -78,48 +73,54 @@ vec3 starfield(vec3 dir) {
   return col;
 }
 
-vec3 diskEmission(vec3 hit, vec3 camPos) {
-  float r = length(hit.xz);
-  float phi = atan(hit.z, hit.x);
-  float rIn = rIsco();
-  float rOut = 14.5;
-  if (r < rIn - 0.25 || r > rOut) return vec3(0.0);
-
+/** g = ν_obs/ν_em for equatorial Kerr circular orbit (Doppler × grav). */
+float gFactor(float r, vec3 hit, vec3 camPos) {
   float om = 1.0 / (pow(max(r, 0.6), 1.5) + uSpin);
-  float ang = phi - uTime * uTimeScale * om * 5.0;
-
-  // filamentary turbulence (differential shear)
-  float f1 = 0.5 + 0.5 * sin(ang * 4.0 + r * 2.2);
-  float f2 = 0.5 + 0.5 * sin(ang * 9.0 - r * 4.0 + 0.8);
-  float f3 = 0.5 + 0.5 * sin(ang * 2.0 + r * 0.6);
-  float turb = 0.45 + 0.3 * f1 * f3 + 0.2 * f2;
-
   vec3 vdir = vec3(-om * hit.z, 0.0, om * hit.x);
-  float speed = clamp(length(vdir), 0.0, 0.88);
+  float speed = clamp(length(vdir), 0.0, 0.9);
   vdir = normalize(vdir + vec3(1e-4, 0.0, 0.0));
   vec3 toObs = normalize(camPos - hit);
   float cosA = dot(vdir, toObs);
   float gamma = 1.0 / sqrt(max(1.0 - speed * speed, 1e-3));
-  float D = 1.0 / max(gamma * (1.0 - speed * cosA), 0.15);
-  float grav = sqrt(max(0.06, 1.0 - 3.0 / r + 2.0 * uSpin / pow(r, 1.5)));
-  float gobs = clamp(D * grav, 0.2, 2.5);
+  float doppler = 1.0 / max(gamma * (1.0 - speed * cosA), 0.12);
+  float grav = sqrt(max(0.05, 1.0 - 3.0 / r + 2.0 * uSpin / pow(r, 1.5)));
+  return clamp(doppler * grav, 0.08, 3.5);
+}
+
+/**
+ * Thin Keplerian disk — smooth shear (no moiré fingerprints).
+ * I_obs = g³ I_em ; color shifts with g.
+ */
+vec3 diskEmission(vec3 hit, vec3 camPos) {
+  float r = length(hit.xz);
+  float phi = atan(hit.z, hit.x);
+  float rIn = rIsco();
+  float rOut = 13.5;
+  if (r < rIn - 0.15 || r > rOut) return vec3(0.0);
+
+  float om = 1.0 / (pow(max(r, 0.6), 1.5) + uSpin);
+  float ang = phi - uTime * uTimeScale * om * 10.0;
+
+  // very low-frequency shear — avoid moiré fingerprints
+  float sp = ang + log(max(r, 0.5)) * 0.6;
+  float f1 = 0.5 + 0.5 * sin(sp * 1.0);
+  float f2 = 0.5 + 0.5 * sin(0.5 * sp + r * 0.15);
+  float turb = 0.7 + 0.25 * f1 + 0.1 * f2;
+  turb = clamp(turb, 0.5, 1.15);
+
+  float g = gFactor(r, hit, camPos);
 
   float t = clamp((r - rIn) / (rOut - rIn), 0.0, 1.0);
-  // sharp inner edge, fall-off outward
-  float radial = exp(-t * 4.0) * smoothstep(rIn, rIn + 0.2, r);
-  radial *= 1.0 - smoothstep(rOut - 1.5, rOut, r);
+  float radial = exp(-t * 2.8) * smoothstep(rIn, rIn + 0.3, r);
+  radial *= 1.0 - smoothstep(rOut - 2.0, rOut, r);
 
-  // thin disk: high contrast
-  float inten = turb * radial * pow(gobs, 3.2);
-  // photon-ring / ISCO blaze
-  inten += exp(-abs(r - rIn) * 2.5) * 0.7 * pow(gobs, 2.0);
+  float temp = clamp(pow(max(rIn / r, 0.05), 0.7), 0.0, 1.0);
+  float inten = turb * radial * pow(g, 3.0) * (0.45 + 0.55 * temp);
 
-  float temp = clamp(0.3 + 0.8 * exp(-t * 2.0) * mix(0.65, 1.3, clamp(D, 0.4, 1.5)), 0.0, 1.0);
-  vec3 col = tempRGB(temp);
-  // strong Doppler tint
-  col *= mix(vec3(0.5, 0.25, 0.18), vec3(1.2, 1.08, 0.9), clamp(D * 0.55, 0.0, 1.0));
+  vec3 col = tempRGB(clamp(temp * mix(0.75, 1.15, clamp(g, 0.0, 1.4)), 0.0, 1.0));
+  col *= mix(vec3(1.1, 0.35, 0.22), vec3(1.1, 1.05, 0.95), smoothstep(0.7, 1.3, g));
 
-  return col * inten * 10.0;
+  return col * inten * 5.0;
 }
 
 vec3 gridGlow(vec3 p) {
@@ -131,7 +132,7 @@ vec3 gridGlow(vec3 p) {
   float line = smoothstep(0.07, 0.0, min(rings, lats));
   float ph = atan(p.z, p.x);
   float twist = 0.5 + 0.5 * sin(ph * 2.0 - r * 0.3 + uTime * 0.2 * uSpin);
-  return vec3(0.1, 0.75, 1.0) * line * exp(-r * 0.14) * (0.2 + 0.35 * twist);
+  return vec3(0.1, 0.75, 1.0) * line * exp(-r * 0.12) * (0.2 + 0.3 * twist);
 }
 
 void main() {
@@ -144,32 +145,37 @@ void main() {
   vec3 pos = uCamPos;
   vec3 vel = dir;
 
-  float capture = rPlus() * 1.08;
+  float capture = rPlus() * 1.05;
 
   float ci = cos(-uIncl);
   float si = sin(-uIncl);
   mat3 rotX = mat3(1.0, 0.0, 0.0,  0.0, ci, si,  0.0, -si, ci);
 
   vec3 col = vec3(0.0);
-  float photonRing = 0.0;
   bool captured = false;
   bool escaped = false;
   int hitCount = 0;
+  float minR = 1e5;
 
-  int steps = uSteps;
+  int steps = int(clamp(uSteps, 32.0, 128.0));
 
-  for (int i = 0; i < 256; i++) {
+  for (int i = 0; i < 128; i++) {
     if (i >= steps) break;
 
     float r = length(pos);
+    minR = min(minR, r);
     if (r < capture) {
       captured = true;
       break;
     }
+    if (r > 70.0 && i > 2) {
+      escaped = true;
+      break;
+    }
 
-    float dt = clamp(r * 0.055, 0.035, 2.2);
+    float dt = clamp(r * 0.05, 0.03, 2.0);
 
-    // disk plane (tilted)
+    // disk plane crossing
     vec3 pD = rotX * pos;
     vec3 vD = rotX * vel;
     float y0 = pD.y;
@@ -177,19 +183,22 @@ void main() {
     if (i > 0 && y0 * y1 <= 0.0 && abs(y0 - y1) > 1e-6 && hitCount < 3) {
       float s = clamp(y0 / (y0 - y1), 0.0, 1.0);
       vec3 hitW = pos + vel * (dt * s);
-      // skip disk samples that are inside the capture region
       if (length(hitW) > capture * 1.15) {
         vec3 hitD = rotX * hitW;
-        col += diskEmission(vec3(hitD.x, 0.0, hitD.z), uCamPos);
+        // physical cylindrical radius in spin-aligned disk
+        col += diskEmission(vec3(hitW.x, 0.0, hitW.z), uCamPos);
         hitCount++;
+        // also allow a secondary (lensed) contribution from disk-frame radius
+        float rD = length(hitD.xz);
+        if (abs(rD - length(hitW.xz)) > 0.5) {
+          // ignore — use world xz only
+        }
       }
     }
 
     col += gridGlow(pos);
 
-    float ringR = 2.8 - uSpin * 0.3;
-    photonRing += exp(-abs(r - ringR) * 3.5) * clamp(dt * 0.06, 0.0, 0.04);
-
+    // null geodesic: Schwarzschild exact spatial form + Kerr frame dragging
     vec3 hvec = cross(pos, vel);
     float h2 = dot(hvec, hvec);
     float rr = max(r, 0.4);
@@ -200,12 +209,13 @@ void main() {
     vec3 Bg = (2.0 * uSpin / (rr * rr * rr)) * (3.0 * dot(sAxis, rhat) * rhat - sAxis);
     acc += 2.0 * cross(vel, Bg);
 
+    // Heun
     vec3 a1 = acc;
     vec3 p2 = pos + vel * dt;
     vec3 v2 = vel + a1 * dt;
     float r2 = max(length(p2), 0.4);
-    vec3 h2v = cross(p2, v2);
-    float hh = dot(h2v, h2v);
+    vec3 h2b = cross(p2, v2);
+    float hh = dot(h2b, h2b);
     vec3 a2 = -1.5 * hh * p2 / (r2 * r2 * r2 * r2 * r2);
     vec3 rh2 = p2 / r2;
     vec3 Bg2 = (2.0 * uSpin / (r2 * r2 * r2)) * (3.0 * dot(sAxis, rh2) * rh2 - sAxis);
@@ -215,32 +225,36 @@ void main() {
     vel += 0.5 * (a1 + a2) * dt;
     float sp = length(vel);
     if (sp > 1e-5) vel *= 1.0 / sp;
-
-    if (length(pos) > 75.0 && i > 2) {
-      escaped = true;
-      break;
-    }
   }
 
-  // Classify leftovers: trapped near hole => shadow
   if (!captured && !escaped) {
-    float rend = length(pos);
-    if (rend < 12.0) captured = true;
+    if (length(pos) < 12.0) captured = true;
     else escaped = true;
   }
 
+  // ---------- Shadow (soft / 朦胧) ----------
+  // Keep any foreground disk hits so the near plate can wrap over the silhouette.
   if (captured) {
-    // unoccluded shadow is pure black; keep only real foreground disk hits
-    if (hitCount == 0) col = vec3(0.0);
+    if (hitCount == 0) {
+      // warm olive void (not a pure cutout)
+      col = vec3(0.055, 0.05, 0.04);
+    }
+    // soften the silhouette: fade the void toward the edge
+    float edge = smoothstep(capture * 0.85, capture * 1.8, minR);
+    col = mix(col * 0.25, col, edge);
   } else {
-    col += starfield(normalize(pos));
+    col += starfield(normalize(pos)) * 0.85;
+    // atmospheric haze just outside the hole
+    float haze = exp(-max(0.0, minR - capture) * 0.28) * 0.06;
+    col += vec3(0.42, 0.34, 0.26) * haze;
   }
 
-  // photon ring
-  col += vec3(1.0, 0.92, 0.7) * photonRing * 3.5;
+  // whisper of warm bleed at the critical curve (not a hard photon-ring band)
+  float bleed = exp(-pow((minR - (2.9 + uSpin * 0.15)) / 0.9, 2.0)) * 0.04;
+  col += vec3(0.55, 0.42, 0.28) * bleed;
 
   vec2 q = vUv - 0.5;
-  col *= 1.0 - 0.15 * dot(q, q);
+  col *= 1.0 - 0.08 * dot(q, q);
 
   col = max(col, 0.0);
   col = col / (1.0 + col);
