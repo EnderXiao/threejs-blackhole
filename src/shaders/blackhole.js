@@ -152,56 +152,45 @@ void main() {
   vec3 bvec = cross(uCamPos, dir);
   float bImp = length(bvec);
 
-  // Screen-frame azimuth around the BH (spin → camera-up component)
+  // Screen azimuth around BH; spin projects to (spx,spy)
   vec3 toB = normalize(-uCamPos);
   vec3 dperp = dir - toB * dot(dir, toB);
-  float sx = dot(dperp, uCamBasis[0]);
-  float sy = dot(dperp, uCamBasis[1]);
-  float soAng = atan(sy, sx);                         // screen polar angle
-  float spx = dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]); // spin on screen
-  float spy = dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]);
-  float spAng = atan(spy, spx);                       // spin projection angle
-  float rel = soAng - spAng;                          // 0 = 自旋正侧
+  float soAng = atan(dot(dperp, uCamBasis[1]), dot(dperp, uCamBasis[0]));
+  float spAng = atan(dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]),
+                     dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]));
+  float rel = soAng - spAng;
 
-  // Kerr critical curve (shared by shadow + photon ring):
-  // circle + strong D-flatten/offset along spin (Bardeen+ 1972)
+  // Kerr critical curve — ONE curve for shadow AND photon ring.
+  // Face-on ≈ circle; spin+inclination → offset + one-sided flatten (D).
+  float sIncl = sin(clamp(abs(uIncl) + 0.35, 0.0, 1.35));
+  float a = clamp(uSpin, 0.0, 0.998);
   float bc0 = 3.0 * sqrt(3.0); // 5.196
-  float bCrit = bc0
-              + 1.8 * uSpin * cos(rel)          // 偏移 / 一侧变大
-              - 1.1 * uSpin * cos(rel) * cos(rel) // 压扁（D 形）
-              + 0.25 * uSpin * cos(2.0 * rel);
-  bCrit = max(bCrit, 2.5);
-  bool inShadowDisk = bImp < bCrit;
-
-  float ci = cos(-uIncl);
-  float si = sin(-uIncl);
-  mat3 rotX = mat3(1.0, 0.0, 0.0,  0.0, ci, si,  0.0, -si, ci);
+  float bCrit = bc0 * (1.0 - 0.04 * a * a)
+              + 1.35 * a * sIncl * cos(rel)
+              - 0.55 * a * sIncl * cos(2.0 * rel);
+  bCrit = max(bCrit, 2.8);
+  bool inside = bImp < bCrit;
 
   vec3 col = vec3(0.0);
   bool captured = false;
   bool escaped = false;
   int hitCount = 0;
   float minR = 1e5;
-
   int steps = int(clamp(uSteps, 32.0, 128.0));
+  float ci = cos(-uIncl);
+  float si = sin(-uIncl);
+  mat3 rotX = mat3(1.0, 0.0, 0.0,  0.0, ci, si,  0.0, -si, ci);
+  vec3 pos = uCamPos;
+  vec3 vel = dir;
+  float capture = rPlus() * 1.05;
 
   for (int i = 0; i < 128; i++) {
     if (i >= steps) break;
-
     float r = length(pos);
     minR = min(minR, r);
-    if (r < capture) {
-      captured = true;
-      break;
-    }
-    if (r > 70.0 && i > 2) {
-      escaped = true;
-      break;
-    }
-
+    if (r < capture) { captured = true; break; }
+    if (r > 70.0 && i > 2) { escaped = true; break; }
     float dt = clamp(r * 0.05, 0.03, 2.0);
-
-    // disk plane crossing
     vec3 pD = rotX * pos;
     vec3 vD = rotX * vel;
     float y0 = pD.y;
@@ -210,77 +199,54 @@ void main() {
       float s = clamp(y0 / (y0 - y1), 0.0, 1.0);
       vec3 hitW = pos + vel * (dt * s);
       if (length(hitW) > capture * 1.02) {
-        vec3 hitD = rotX * hitW;
-        // physical cylindrical radius in spin-aligned disk
         col += diskEmission(vec3(hitW.x, 0.0, hitW.z), uCamPos);
         hitCount++;
-        // also allow a secondary (lensed) contribution from disk-frame radius
-        float rD = length(hitD.xz);
-        if (abs(rD - length(hitW.xz)) > 0.5) {
-          // ignore — use world xz only
-        }
       }
     }
-
     col += gridGlow(pos);
-
-    // null geodesic: Schwarzschild exact spatial form + Kerr frame dragging
     vec3 hvec = cross(pos, vel);
     float h2 = dot(hvec, hvec);
     float rr = max(r, 0.4);
     vec3 acc = -1.5 * h2 * pos / (rr * rr * rr * rr * rr);
-
     vec3 sAxis = vec3(0.0, 1.0, 0.0);
     vec3 rhat = pos / rr;
     vec3 Bg = (2.0 * uSpin / (rr * rr * rr)) * (3.0 * dot(sAxis, rhat) * rhat - sAxis);
     acc += 2.0 * cross(vel, Bg);
-
-    // Heun
-    vec3 a1 = acc;
     vec3 p2 = pos + vel * dt;
-    vec3 v2 = vel + a1 * dt;
+    vec3 v2 = vel + acc * dt;
     float r2 = max(length(p2), 0.4);
     vec3 h2b = cross(p2, v2);
     float hh = dot(h2b, h2b);
     vec3 a2 = -1.5 * hh * p2 / (r2 * r2 * r2 * r2 * r2);
     vec3 rh2 = p2 / r2;
-    vec3 Bg2 = (2.0 * uSpin / (r2 * r2 * r2)) * (3.0 * dot(sAxis, rh2) * rh2 - sAxis);
-    a2 += 2.0 * cross(v2, Bg2);
-
+    a2 += 2.0 * cross(v2, (2.0 * uSpin / (r2 * r2 * r2)) * (3.0 * dot(sAxis, rh2) * rh2 - sAxis));
     pos += 0.5 * (vel + v2) * dt;
-    vel += 0.5 * (a1 + a2) * dt;
+    vel += 0.5 * (acc + a2) * dt;
     float sp = length(vel);
     if (sp > 1e-5) vel *= 1.0 / sp;
   }
 
-  if (!captured && !escaped) {
-    if (length(pos) < capture * 1.15) captured = true;
-    else escaped = true;
-  }
-  // Physical shadow = critical impact-parameter disk b < b_c.
-  if (inShadowDisk) captured = true;
+  // ===== Composite: black core, hairline ring on b_c, disk outside =====
+  vec3 disk = col;
+  vec3 sky = escaped ? starfield(normalize(pos)) * 0.85 : vec3(0.0);
 
-  // ---------- Shadow (not a sticker) ----------
-  // Keep foreground disk so the near plate can sit ON the silhouette edge.
-  if (captured) {
-    if (hitCount == 0) {
-      col = vec3(0.025, 0.022, 0.018);
-    }
-    // soft feather into the critical curve
-    float edge = smoothstep(bCrit - 0.15, bCrit + 0.2, bImp);
-    col = mix(col * 0.4, col, edge);
+  // inside critical curve → black core (only slight foreground disk, not a lighter "body")
+  if (inside) {
+    vec3 voidCol = vec3(0.008, 0.008, 0.01);
+    // allow a whisper of foreground plate at the very rim only
+    float rim = smoothstep(bCrit - 0.35, bCrit, bImp);
+    col = mix(voidCol, mix(voidCol, disk * 0.15, rim), step(0.5, float(hitCount)));
+    if (hitCount == 0) col = voidCol;
   } else {
-    col += starfield(normalize(pos)) * 0.85;
-    float haze = exp(-max(0.0, bImp - bCrit) * 1.2) * 0.05;
-    col += vec3(0.4, 0.32, 0.24) * haze;
+    col = disk + sky;
   }
 
-  // ---------- Photon ring: THIN bright line ON b = b_c ----------
-  // hairline ON the critical curve (same bCrit as the shadow boundary)
+  // Photon ring = same critical curve, hairline (follows D-shape with spin)
   float db = bImp - bCrit;
-  float ring = exp(-pow(db / 0.05, 2.0));
-  col += vec3(1.0, 0.93, 0.72) * ring * 2.4;
-  col += vec3(1.0, 0.9, 0.7) * exp(-pow((db + 0.1) / 0.03, 2.0)) * 0.55;
+  float ring = exp(-pow(db / 0.045, 2.0));
+  col += vec3(1.0, 0.94, 0.78) * ring * 2.5;
+  // n=2 hairline just inside
+  col += vec3(1.0, 0.9, 0.72) * exp(-pow((db + 0.1) / 0.025, 2.0)) * 0.45;
 
   vec2 q = vUv - 0.5;
   col *= 1.0 - 0.08 * dot(q, q);
