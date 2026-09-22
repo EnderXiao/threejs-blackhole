@@ -64,13 +64,11 @@ export class MatterField {
           float lenBH = max(length(toBH), 0.001);
           float lenP  = max(length(toP), 0.001);
           float cosAng = dot(toBH, toP) / (lenBH * lenP);
-          // Cull ONLY the true silhouette (b_c ≈ 5.2), with a soft fade —
-          // a wide hard cone left a gray "moat" of missing dust outside the ring.
-          float shadowCos = cos(5.3 / max(lenBH, 1.0));
-          float edgeCos = cos(5.9 / max(lenBH, 1.0));
+          // Cull only INSIDE the silhouette — never in the photon-ring band
+          float shadowCos = cos(4.6 / max(lenBH, 1.0));
           float inFront = step(lenP, lenBH + 0.5);
-          float occl = smoothstep(edgeCos, shadowCos, cosAng) * inFront;
-          float inside = smoothstep(5.6, 4.8, length(position));
+          float occl = smoothstep(shadowCos, shadowCos + 0.002, cosAng) * inFront;
+          float inside = smoothstep(4.9, 4.2, length(position));
           float vis = 1.0 - max(occl, inside);
 
           vColor = aColor * vis;

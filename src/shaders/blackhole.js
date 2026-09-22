@@ -234,24 +234,26 @@ void main() {
 
   // ---------- Shadow (soft / 朦胧) ----------
   // Keep any foreground disk hits so the near plate can wrap over the silhouette.
-  if (captured) {
-    if (hitCount == 0) {
-      // warm olive void (not a pure cutout)
-      col = vec3(0.055, 0.05, 0.04);
-    }
-    // soften the silhouette: fade the void toward the edge
-    float edge = smoothstep(capture * 0.85, capture * 1.8, minR);
-    col = mix(col * 0.25, col, edge);
-  } else {
-    col += starfield(normalize(pos)) * 0.85;
-    // atmospheric haze just outside the hole
-    float haze = exp(-max(0.0, minR - capture) * 0.28) * 0.06;
-    col += vec3(0.42, 0.34, 0.26) * haze;
-  }
+  vec3 disk = col;
+  vec3 sky = (escaped) ? starfield(normalize(pos)) * 0.75 : vec3(0.0);
 
-  // whisper of warm bleed at the critical curve (not a hard photon-ring band)
-  float bleed = exp(-pow((minR - (2.9 + uSpin * 0.15)) / 0.9, 2.0)) * 0.04;
-  col += vec3(0.55, 0.42, 0.28) * bleed;
+  // 事件视界阴影：临界曲线内纯黑
+  // 光子环：贴着阴影外缘的厚软亮环（第一版观感）
+  // 其外：吸积盘 / 星空 —— 中间不允许出现灰黑空带
+  float db = bImp - bCrit;
+  float ring = exp(-pow(db / 0.5, 2.0));          // thick soft photon-ring glow
+  float ringCore = exp(-pow(db / 0.18, 2.0));     // brighter core of the ring
+
+  if (inside) {
+    col = vec3(0.0);
+    // ring still bleeds slightly onto the inner edge of the silhouette
+    col += vec3(1.0, 0.93, 0.78) * exp(-pow((bCrit - bImp) / 0.15, 2.0)) * 0.55;
+  } else {
+    col = disk + sky;
+    // PHOTON RING (this band must be bright — not a dark moat)
+    vec3 ringCol = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 0.98, 0.92), ringCore);
+    col += ringCol * (ring * 2.4 + ringCore * 1.6);
+  }
 
   vec2 q = vUv - 0.5;
   col *= 1.0 - 0.08 * dot(q, q);
