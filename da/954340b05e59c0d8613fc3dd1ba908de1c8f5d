@@ -1,0 +1,14 @@
+dist/index.html
+  h_1edca6cb63ac1c 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "da954340b05e59c0d8613fc3dd1ba908de1c8f5d",
+  "prompts": {},
+  "humans": {
+    "h_1edca6cb63ac1c": {
+      "author": "xiaoganyun <xiaoganyun@xiaomi.com>"
+    }
+  }
+}
