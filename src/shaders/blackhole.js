@@ -239,30 +239,26 @@ void main() {
     if (length(pos) < capture * 1.15) captured = true;
     else escaped = true;
   }
-  // Physical shadow = critical impact-parameter disk (b < b_c), not merely r < r₊
-  if (inShadowDisk && hitCount == 0) captured = true;
+  // Physical shadow = critical impact-parameter disk b < b_c (Gralla–Holz–Wald 2019).
+  if (inShadowDisk) captured = true;
 
-  // ---------- Shadow (soft) ----------
+  // ---------- Shadow: essentially black inside the critical curve ----------
+  // Only true foreground disk (hit before winding) may show; otherwise pure void.
   if (captured) {
-    if (hitCount == 0) {
-      col = vec3(0.03, 0.028, 0.022);
-    }
-    // feather across the SAME critical curve used for the ring
-    float edge = smoothstep(bCrit - 0.05, bCrit + 0.35, bImp);
-    col = mix(col * 0.5, col, edge);
+    col = vec3(0.02, 0.018, 0.014);
+    // hard-ish cut at the critical curve (no wide gray moat)
+    float edge = smoothstep(bCrit - 0.02, bCrit + 0.08, bImp);
+    col = mix(col, col, edge);
   } else {
     col += starfield(normalize(pos)) * 0.85;
-    float haze = exp(-max(0.0, bImp - bCrit) * 1.5) * 0.06;
-    col += vec3(0.42, 0.34, 0.26) * haze;
   }
 
-  // ---------- Photon ring on the critical curve b ≈ b_c ----------
-  // Gralla–Holz–Wald 2019: ring traces the capture critical curve (same outline).
+  // ---------- Photon ring: THIN bright line ON b = b_c ----------
   float db = abs(bImp - bCrit);
-  float ring = exp(-pow(db / 0.2, 2.0));
-  float ring2 = exp(-pow((bImp - (bCrit - 0.32)) / 0.07, 2.0));
-  col += vec3(1.0, 0.93, 0.72) * (ring * 2.8 + ring2 * 0.9);
-  col += vec3(0.55, 0.42, 0.28) * exp(-pow(db / 0.65, 2.0)) * 0.06;
+  float ring = exp(-pow(db / 0.06, 2.0));   // ~σ=0.06 → hairline
+  col += vec3(1.0, 0.93, 0.72) * ring * 2.2;
+  // faint n=2 just inside
+  col += vec3(1.0, 0.9, 0.7) * exp(-pow((bImp - (bCrit - 0.12)) / 0.03, 2.0)) * 0.7;
 
   vec2 q = vUv - 0.5;
   col *= 1.0 - 0.08 * dot(q, q);
