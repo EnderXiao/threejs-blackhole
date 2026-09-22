@@ -151,8 +151,17 @@ void main() {
   // b = |x × v| asymptotic impact parameter; b_c = 3√3 M (Schw.) with mild Kerr D-shape.
   vec3 bvec = cross(uCamPos, dir);
   float bImp = length(bvec);
-  float skyPhi = atan(dir.z, dir.x);
-  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.08 * uSpin) + 0.55 * uSpin * cos(skyPhi);
+  // Sky polar angle around the BH in the camera plane + spin-axis projection.
+  // Kerr critical curve is D-shaped / offset along the frame-dragging side
+  // (Bardeen+ 1972; Gralla–Holz–Wald 2019). MUST vary across the image.
+  vec2 n2 = vec2(dot(dir, uCamBasis[0]), dot(dir, uCamBasis[1]));
+  n2 = normalize(n2 + vec2(1e-5, 0.0));
+  vec2 sp2 = vec2(dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]), dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]));
+  sp2 = normalize(sp2 + vec2(1e-5, 0.0));
+  float cSpin = dot(n2, sp2); // +1 → 走自旋投影正侧，-1 → 负侧
+  // b_c ≈ 3√3 M, 随 a 略缩，并沿自旋侧压扁/偏移（幅度 ~0.8M @ a=1）
+  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.12 * uSpin * uSpin)
+              + 0.85 * uSpin * cSpin;
   bool inShadowDisk = bImp < bCrit;
 
   float ci = cos(-uIncl);
