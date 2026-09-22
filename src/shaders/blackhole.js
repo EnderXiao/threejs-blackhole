@@ -240,6 +240,19 @@ void main() {
   // 事件视界阴影：临界曲线内纯黑
   // 光子环：贴着阴影外缘的厚软亮环（第一版观感）
   // 其外：吸积盘 / 星空 —— 中间不允许出现灰黑空带
+  // Critical curve (needed by composite below)
+  vec3 bvec = cross(uCamPos, dir);
+  float bImp = length(bvec);
+  vec3 toB = normalize(-uCamPos);
+  vec3 dperp = dir - toB * dot(dir, toB);
+  float soAng = atan(dot(dperp, uCamBasis[1]), dot(dperp, uCamBasis[0]));
+  float spAng = atan(dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]),
+                     dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]));
+  float aS = clamp(uSpin, 0.0, 0.998);
+  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.03 * aS * aS)
+              + 0.5 * aS * cos(soAng - spAng);
+  bool inside = bImp < bCrit;
+
   float db = bImp - bCrit;
   float ring = exp(-pow(db / 0.5, 2.0));          // thick soft photon-ring glow
   float ringCore = exp(-pow(db / 0.18, 2.0));     // brighter core of the ring
