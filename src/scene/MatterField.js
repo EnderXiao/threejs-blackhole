@@ -71,6 +71,20 @@ export class MatterField {
           float inside = smoothstep(4.9, 4.2, length(position));
           float vis = 1.0 - max(occl, inside);
 
+          // Cull inside the same elliptical shadow as the shader (no sticker dust)
+          vec4 clipP = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          vec4 clipB = projectionMatrix * modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+          vec2 ndcP = clipP.xy / max(clipP.w, 1e-4);
+          vec2 ndcB = clipB.xy / max(clipB.w, 1e-4);
+          vec2 dxy = (ndcP - ndcB) * vec2(1.0, 1.0);
+          // approximate semi-axes in NDC for b_c≈5.2 at current camera distance
+          float camDist = max(length(uCamPos), 1.0);
+          float pix = (5.2 / camDist) / tan(0.5); // rough NDC scale
+          float axn = pix * (1.0 - 0.32 * 0.9);
+          float ayn = pix * (1.0 + 0.10 * 0.9);
+          float ell = (dxy.x * dxy.x) / (axn * axn) + (dxy.y * dxy.y) / (ayn * ayn);
+          vis *= smoothstep(1.0, 1.25, ell);
+
           vColor = aColor * vis;
           if (vis < 0.08) {
             gl_Position = vec4(2.0, 2.0, 2.0, 1.0);

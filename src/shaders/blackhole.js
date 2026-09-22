@@ -254,10 +254,10 @@ void main() {
   float c = cos(rel);
   float sn = sin(rel);
   // semi-axes in impact-parameter space
-  float ax = 5.196 * (1.0 - 0.14 * aS);   // along spin: flatter
-  float ay = 5.196 * (1.0 + 0.04 * aS);
+  float ax = 5.196 * (1.0 - 0.32 * aS);   // along spin: clearly flatter (D)
+  float ay = 5.196 * (1.0 + 0.10 * aS);
   // ellipse centered with a small spin offset
-  vec2 e = vec2(bImp * c + 0.55 * aS, bImp * sn);
+  vec2 e = vec2(bImp * c + 0.85 * aS, bImp * sn);
   float ell = (e.x * e.x) / (ax * ax) + (e.y * e.y) / (ay * ay);
   bool inside = ell < 1.0;
   // radial b_c along current ray direction (for the photon ring)
