@@ -1,0 +1,40 @@
+DESIGN.md
+  h_1edca6cb63ac1c 1-95
+README.md
+  h_1edca6cb63ac1c 1-49
+RESEARCH.md
+  h_1edca6cb63ac1c 1-88
+dist/index.html
+  h_1edca6cb63ac1c 1-102
+index.html
+  h_1edca6cb63ac1c 1-99
+package.json
+  h_1edca6cb63ac1c 1-18
+src/camera/FreeCamera.js
+  h_1edca6cb63ac1c 1-129
+src/main.js
+  h_1edca6cb63ac1c 1-148
+src/physics/kerr.js
+  h_1edca6cb63ac1c 1-110
+src/scene/MatterField.js
+  h_1edca6cb63ac1c 1-167
+src/shaders/blackhole.js
+  h_1edca6cb63ac1c 1-250
+src/styles.css
+  h_1edca6cb63ac1c 1-336
+src/ui/HUD.js
+  h_1edca6cb63ac1c 1-80
+vite.config.js
+  h_1edca6cb63ac1c 1-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ab0339f41229d3ebbb10c6c85fbe95056b6c09ee",
+  "prompts": {},
+  "humans": {
+    "h_1edca6cb63ac1c": {
+      "author": "xiaoganyun <xiaoganyun@xiaomi.com>"
+    }
+  }
+}
