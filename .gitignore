@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# build output (hashed assets; rebuild with `npm run build`)
+dist/assets/
+
+# QA / browser tooling artifacts
+.playwright-cli/
+.playwright-mcp/
+qa/
+
+# logs & local state
+*.log
+.DS_Store
+.vite/
+.cache/
