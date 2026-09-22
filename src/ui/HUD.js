@@ -19,8 +19,6 @@ export class HUD {
       inpSteps: document.getElementById('inp-steps'),
       inpTime: document.getElementById('inp-time'),
       inpGrid: document.getElementById('inp-grid'),
-      inpTags: document.getElementById('inp-tags'),
-      tags: document.getElementById('tags'),
       start: document.getElementById('start'),
       btnStart: document.getElementById('btn-start'),
     };
@@ -31,7 +29,6 @@ export class HUD {
       steps: () => {},
       timeScale: () => {},
       grid: () => {},
-      tags: () => {},
     };
 
     this.el.inpA.addEventListener('input', () => {
@@ -57,11 +54,6 @@ export class HUD {
     });
     this.el.inpGrid.addEventListener('change', () => {
       this.onChange.grid(this.el.inpGrid.checked);
-    });
-    this.el.inpTags?.addEventListener('change', () => {
-      const on = this.el.inpTags.checked;
-      this.el.tags?.classList.toggle('off', !on);
-      this.onChange.tags(on);
     });
   }
 
