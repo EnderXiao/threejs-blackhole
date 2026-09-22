@@ -264,19 +264,19 @@ void main() {
   float bCrit = length(vec2(ax * c - 0.55 * aS, ay * sn));
 
 
-  // ring on the same elliptical critical curve (declare before use)
-  float ring = exp(-pow((1.0 - ell) / 0.08, 2.0));
-  float ringCore = exp(-pow((1.0 - ell) / 0.025, 2.0));
-  vec3 ringCol = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 0.98, 0.92), ringCore);
+  // Photon ring lives on the SAME ellipse as the shadow (ell = 1).
+  float ring = exp(-pow((1.0 - ell) / 0.1, 2.0));
+  float ringCore = exp(-pow((1.0 - ell) / 0.03, 2.0));
+  vec3 ringCol = mix(vec3(1.0, 0.9, 0.72), vec3(1.0, 0.98, 0.92), ringCore);
 
   if (inside) {
-    // 前景盘只允许很淡地压在轮廓附近，避免横条盖满阴影
-    float nearEdge = smoothstep(0.55, 1.0, ell);
-    col = mix(vec3(0.0), disk * 0.35, nearEdge * step(0.5, float(hitCount)));
-    col += vec3(1.0, 0.93, 0.78) * ring * 0.5;
+    // 第一版观感：阴影内纯黑，不把盘画成横条盖上去
+    col = vec3(0.0);
+    // 环的内侧轻渗光，保持「贴边」
+    col += ringCol * ring * 0.85;
   } else {
     col = disk + sky;
-    col += ringCol * (ring * 2.6 + ringCore * 1.8);
+    col += ringCol * (ring * 2.5 + ringCore * 1.7);
   }
 
   vec2 q = vUv - 0.5;
