@@ -7,12 +7,13 @@ void main() {
 `;
 
 /**
- * Kerr-inspired null-geodesic raytracer.
+ * Kerr null-geodesic raytracer with explicit observables:
+ *  1) event-horizon shadow (pure black)
+ *  2) photon ring (thin bright rim at critical impact parameter)
+ *  3) Doppler beaming (approaching side bright/blue, receding dim/red)
+ *  4) gravitational redshift (inner disk redder & dimmer)
  *
- *   a = −1.5 (x×v)² x / r⁵  +  2 v × B_g ,  B_g ~ Kerr gravitomagnetic dipole
- *
- * Thin Keplerian accretion disk + Doppler beaming + gravitational redshift.
- * Trapped (photon-sphere) rays are classified as captured so the shadow stays black.
+ * Disk pattern shears differentially so motion is visible.
  */
 export const blackholeFrag = /* glsl */ `
 precision highp float;
@@ -42,18 +43,16 @@ float rIsco() {
   return 3.0 + z2 - sqrt(max(0.0, (3.0 - z1) * (3.0 + z1 + 2.0 * z2)));
 }
 
+// high-contrast blackbody-ish
 vec3 tempRGB(float t) {
   t = clamp(t, 0.0, 1.0);
-  // iron-hot palette
-  vec3 c0 = vec3(0.35, 0.03, 0.02);
-  vec3 c1 = vec3(0.95, 0.2, 0.04);
-  vec3 c2 = vec3(1.0, 0.55, 0.12);
-  vec3 c3 = vec3(1.0, 0.88, 0.55);
-  vec3 c4 = vec3(1.0, 0.98, 0.9);
-  if (t < 0.25) return mix(c0, c1, t / 0.25);
-  if (t < 0.55) return mix(c1, c2, (t - 0.25) / 0.3);
-  if (t < 0.85) return mix(c2, c3, (t - 0.55) / 0.3);
-  return mix(c3, c4, (t - 0.85) / 0.15);
+  vec3 red = vec3(0.55, 0.04, 0.02);
+  vec3 orange = vec3(1.0, 0.28, 0.04);
+  vec3 gold = vec3(1.0, 0.65, 0.15);
+  vec3 white = vec3(1.0, 0.95, 0.85);
+  if (t < 0.3) return mix(red, orange, t / 0.3);
+  if (t < 0.65) return mix(orange, gold, (t - 0.3) / 0.35);
+  return mix(gold, white, (t - 0.65) / 0.35);
 }
 
 vec3 starfield(vec3 dir) {
@@ -61,7 +60,6 @@ vec3 starfield(vec3 dir) {
   vec3 col = vec3(0.002, 0.003, 0.007);
   float band = exp(-pow(d.y * 1.2 + 0.08, 2.0) * 2.0);
   col += vec3(0.008, 0.012, 0.022) * band;
-
   for (int i = 0; i < 3; i++) {
     float scale = 50.0 + float(i) * 80.0;
     vec3 gp = d * scale + float(i) * 11.1;
@@ -78,6 +76,10 @@ vec3 starfield(vec3 dir) {
   return col;
 }
 
+/**
+ * Disk emission at a disk-frame point (y=0).
+ * Separates Doppler (view-angle) and gravitational redshift (radius).
+ */
 vec3 diskEmission(vec3 hit, vec3 camPos) {
   float r = length(hit.xz);
   float phi = atan(hit.z, hit.x);
@@ -86,40 +88,59 @@ vec3 diskEmission(vec3 hit, vec3 camPos) {
   if (r < rIn - 0.25 || r > rOut) return vec3(0.0);
 
   float om = 1.0 / (pow(max(r, 0.6), 1.5) + uSpin);
-  float ang = phi - uTime * uTimeScale * om * 5.0;
+  // strong visible shear — pattern rotates with local Keplerian rate
+  float ang = phi - uTime * uTimeScale * om * 32.0;
 
-  // filamentary turbulence (differential shear)
-  float f1 = 0.5 + 0.5 * sin(ang * 4.0 + r * 2.2);
-  float f2 = 0.5 + 0.5 * sin(ang * 9.0 - r * 4.0 + 0.8);
-  float f3 = 0.5 + 0.5 * sin(ang * 2.0 + r * 0.6);
-  float turb = 0.45 + 0.3 * f1 * f3 + 0.2 * f2;
+  // logarithmic-spiral filaments (shear visibly; avoid static rings)
+  float spiralA = ang + log(max(r, 0.5)) * 2.5;
+  float spiralB = ang * 2.0 - log(max(r, 0.5)) * 4.0;
+  float f1 = 0.5 + 0.5 * sin(spiralA * 5.0);
+  float f2 = 0.5 + 0.5 * sin(spiralB * 3.0 + 0.8);
+  float f3 = 0.5 + 0.5 * sin(spiralA * 9.0 + uTime * 0.6);
+  float turb = 0.12 + 0.9 * pow(f1, 3.5) * (0.45 + 0.55 * f3) + 0.5 * pow(f2, 5.0);
+  turb = clamp(turb, 0.05, 2.6);
 
+  // --- Doppler (view-dependent) ---
   vec3 vdir = vec3(-om * hit.z, 0.0, om * hit.x);
-  float speed = clamp(length(vdir), 0.0, 0.88);
+  float speed = clamp(length(vdir), 0.0, 0.9);
   vdir = normalize(vdir + vec3(1e-4, 0.0, 0.0));
   vec3 toObs = normalize(camPos - hit);
   float cosA = dot(vdir, toObs);
   float gamma = 1.0 / sqrt(max(1.0 - speed * speed, 1e-3));
-  float D = 1.0 / max(gamma * (1.0 - speed * cosA), 0.15);
-  float grav = sqrt(max(0.06, 1.0 - 3.0 / r + 2.0 * uSpin / pow(r, 1.5)));
-  float gobs = clamp(D * grav, 0.2, 2.5);
+  float D = 1.0 / max(gamma * (1.0 - speed * cosA), 0.12); // Doppler factor
+
+  // --- gravitational redshift (radius) ---
+  float grav = sqrt(max(0.05, 1.0 - 3.0 / r + 2.0 * uSpin / pow(r, 1.5)));
+
+  // Intensity: beaming ~ D^3  ×  grav^2  (dramatic but readable)
+  float beaming = pow(clamp(D, 0.15, 3.0), 3.0);
+  float redDim = pow(grav, 2.2);
 
   float t = clamp((r - rIn) / (rOut - rIn), 0.0, 1.0);
-  // sharp inner edge, fall-off outward
-  float radial = exp(-t * 4.0) * smoothstep(rIn, rIn + 0.2, r);
+  float radial = exp(-t * 3.5) * smoothstep(rIn, rIn + 0.15, r);
   radial *= 1.0 - smoothstep(rOut - 1.5, rOut, r);
 
-  // thin disk: high contrast
-  float inten = turb * radial * pow(gobs, 3.2);
-  // photon-ring / ISCO blaze
-  inten += exp(-abs(r - rIn) * 2.5) * 0.7 * pow(gobs, 2.0);
+  float inten = turb * radial * beaming * redDim * 3.8;
+  // ISCO blaze
+  inten += exp(-abs(r - rIn) * 3.0) * 0.9 * beaming * redDim;
 
-  float temp = clamp(0.3 + 0.8 * exp(-t * 2.0) * mix(0.65, 1.3, clamp(D, 0.4, 1.5)), 0.0, 1.0);
-  vec3 col = tempRGB(temp);
-  // strong Doppler tint
-  col *= mix(vec3(0.5, 0.25, 0.18), vec3(1.2, 1.08, 0.9), clamp(D * 0.55, 0.0, 1.0));
+  // COLOR encodes both effects explicitly:
+  //  · Doppler: blue-white when D>1 (approaching), deep red when D<1 (receding)
+  //  · grav:   inner / strong field pushed further toward red
+  float heat = clamp(exp(-t * 2.2) * 0.55 + 0.35 * clamp(D, 0.0, 1.5), 0.0, 1.0);
+  vec3 warm = tempRGB(heat);
 
-  return col * inten * 10.0;
+  // Doppler hue push
+  vec3 blueShift = vec3(0.85, 0.95, 1.25);
+  vec3 redShift = vec3(1.15, 0.35, 0.18);
+  float dopp = smoothstep(0.7, 1.35, D);
+  vec3 col = mix(redShift, mix(warm, blueShift, 0.45), dopp);
+  col = mix(col, warm, 0.45);
+
+  // gravitational redshift: pull toward red near hole
+  col = mix(col, vec3(0.85, 0.18, 0.08), (1.0 - grav) * 0.65);
+
+  return col * inten * 5.5;
 }
 
 vec3 gridGlow(vec3 p) {
@@ -130,7 +151,7 @@ vec3 gridGlow(vec3 p) {
   float lats = abs(fract(p.y * 0.4) - 0.5);
   float line = smoothstep(0.07, 0.0, min(rings, lats));
   float ph = atan(p.z, p.x);
-  float twist = 0.5 + 0.5 * sin(ph * 2.0 - r * 0.3 + uTime * 0.2 * uSpin);
+  float twist = 0.5 + 0.5 * sin(ph * 2.0 - r * 0.3 + uTime * 0.3 * uSpin);
   return vec3(0.1, 0.75, 1.0) * line * exp(-r * 0.14) * (0.2 + 0.35 * twist);
 }
 
@@ -144,17 +165,21 @@ void main() {
   vec3 pos = uCamPos;
   vec3 vel = dir;
 
-  float capture = rPlus() * 1.08;
+  float capture = rPlus() * 1.05;
+  float rPhoton = 2.85 - uSpin * 0.25; // equatorial-ish photon sphere scale
 
   float ci = cos(-uIncl);
   float si = sin(-uIncl);
   mat3 rotX = mat3(1.0, 0.0, 0.0,  0.0, ci, si,  0.0, -si, ci);
 
   vec3 col = vec3(0.0);
-  float photonRing = 0.0;
+  float ring = 0.0;
+  float minR = 1e5;
   bool captured = false;
   bool escaped = false;
   int hitCount = 0;
+  // track whether this ray is a high-order image (wound around the hole)
+  float wind = 0.0;
 
   int steps = uSteps;
 
@@ -162,14 +187,15 @@ void main() {
     if (i >= steps) break;
 
     float r = length(pos);
+    minR = min(minR, r);
     if (r < capture) {
       captured = true;
       break;
     }
 
-    float dt = clamp(r * 0.055, 0.035, 2.2);
+    float dt = clamp(r * 0.05, 0.03, 2.2);
 
-    // disk plane (tilted)
+    // disk crossing
     vec3 pD = rotX * pos;
     vec3 vD = rotX * vel;
     float y0 = pD.y;
@@ -177,8 +203,7 @@ void main() {
     if (i > 0 && y0 * y1 <= 0.0 && abs(y0 - y1) > 1e-6 && hitCount < 3) {
       float s = clamp(y0 / (y0 - y1), 0.0, 1.0);
       vec3 hitW = pos + vel * (dt * s);
-      // skip disk samples that are inside the capture region
-      if (length(hitW) > capture * 1.15) {
+      if (length(hitW) > capture * 1.1) {
         vec3 hitD = rotX * hitW;
         col += diskEmission(vec3(hitD.x, 0.0, hitD.z), uCamPos);
         hitCount++;
@@ -187,14 +212,15 @@ void main() {
 
     col += gridGlow(pos);
 
-    float ringR = 2.8 - uSpin * 0.3;
-    photonRing += exp(-abs(r - ringR) * 3.5) * clamp(dt * 0.06, 0.0, 0.04);
+    // accumulate how close we swing to the photon sphere
+    ring += exp(-pow((r - rPhoton) / 0.35, 2.0)) * clamp(dt * 0.12, 0.0, 0.06);
+    wind += abs(cross(vel, pos / max(r, 1e-3)).y) * dt * 0.02;
 
+    // null geodesic force
     vec3 hvec = cross(pos, vel);
     float h2 = dot(hvec, hvec);
     float rr = max(r, 0.4);
     vec3 acc = -1.5 * h2 * pos / (rr * rr * rr * rr * rr);
-
     vec3 sAxis = vec3(0.0, 1.0, 0.0);
     vec3 rhat = pos / rr;
     vec3 Bg = (2.0 * uSpin / (rr * rr * rr)) * (3.0 * dot(sAxis, rhat) * rhat - sAxis);
@@ -222,25 +248,30 @@ void main() {
     }
   }
 
-  // Classify leftovers: trapped near hole => shadow
   if (!captured && !escaped) {
-    float rend = length(pos);
-    if (rend < 12.0) captured = true;
+    if (length(pos) < 12.0) captured = true;
     else escaped = true;
   }
 
+  // ---------- 1) Event-horizon shadow ----------
   if (captured) {
-    // unoccluded shadow is pure black; keep only real foreground disk hits
-    if (hitCount == 0) col = vec3(0.0);
+    // pure black silhouette (secondary images live on non-captured rays)
+    col = vec3(0.0);
   } else {
     col += starfield(normalize(pos));
   }
 
-  // photon ring
-  col += vec3(1.0, 0.92, 0.7) * photonRing * 3.5;
+  // ---------- 2) Photon ring ----------
+  float ringGlow = clamp(ring, 0.0, 1.5);
+  float graze = exp(-pow((minR - rPhoton) / 0.18, 2.0));
+  float orderBoost = 0.7 + 1.0 * clamp(wind * 3.0, 0.0, 1.5);
+  if (!captured) {
+    // sharp bright rim hugging the shadow
+    col += vec3(1.0, 0.95, 0.75) * (ringGlow * 3.5 + graze * 5.0) * orderBoost;
+  }
 
   vec2 q = vUv - 0.5;
-  col *= 1.0 - 0.15 * dot(q, q);
+  col *= 1.0 - 0.12 * dot(q, q);
 
   col = max(col, 0.0);
   col = col / (1.0 + col);

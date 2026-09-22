@@ -32,6 +32,7 @@ const uniforms = {
   uShowGrid: { value: false },
   uTimeScale: { value: 1 },
 };
+// keep sim time advancing even when timeScale is dragged (pattern still updates uTime)
 const quad = new THREE.Mesh(
   new THREE.PlaneGeometry(2, 2),
   new THREE.ShaderMaterial({
