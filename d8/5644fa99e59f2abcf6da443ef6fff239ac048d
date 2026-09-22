@@ -1,0 +1,16 @@
+dist/index.html
+  h_1edca6cb63ac1c 8
+src/shaders/blackhole.js
+  h_1edca6cb63ac1c 252-256,263,265-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d85644fa99e59f2abcf6da443ef6fff239ac048d",
+  "prompts": {},
+  "humans": {
+    "h_1edca6cb63ac1c": {
+      "author": "xiaoganyun <xiaoganyun@xiaomi.com>"
+    }
+  }
+}
