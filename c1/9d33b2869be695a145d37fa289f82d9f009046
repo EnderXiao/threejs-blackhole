@@ -1,0 +1,26 @@
+RESEARCH.md
+  h_1edca6cb63ac1c 51-66,73
+dist/index.html
+  h_1edca6cb63ac1c 8-9,94-97
+index.html
+  h_1edca6cb63ac1c 90-93
+src/main.js
+  h_1edca6cb63ac1c 53-59,158-179
+src/shaders/blackhole.js
+  h_1edca6cb63ac1c 10,12-24,37,42-43,56-171,174-182,198,207-208,210,213,216-223,229-231,233-234,236-238,240,243,246,248,250-251,261-279,284-287,291-293,295-299,301-305,309-310,314-317,319-358,360-376,379,381-388,392,396,398-401,404-408,411-415
+src/styles.css
+  h_1edca6cb63ac1c 216-218,225-248,269,280,286
+src/ui/HUD.js
+  h_1edca6cb63ac1c 93-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c19d33b2869be695a145d37fa289f82d9f009046",
+  "prompts": {},
+  "humans": {
+    "h_1edca6cb63ac1c": {
+      "author": "xiaoganyun <xiaoganyun@xiaomi.com>"
+    }
+  }
+}
