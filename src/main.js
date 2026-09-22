@@ -50,6 +50,13 @@ const matter = new MatterField(11000);
 scene.add(matter.points);
 
 const hud = new HUD();
+// world-space points the annotation cards track (BH features, not the screen)
+const tagAnchor = {
+  shadow: new THREE.Vector3(0, 0, 0),
+  ring: new THREE.Vector3(3.6, 0.15, 0),
+  doppler: new THREE.Vector3(8.5, 0, 2.0),
+  redshift: new THREE.Vector3(-6.5, 0, -1.5),
+};
 const state = {
   spin: 0.9,
   timeScale: 1,
@@ -147,6 +154,28 @@ function frame(now) {
   matter.setCameraPosition(camera.object.position);
 
   hud.updateReadout(camera.object.position, state.spin);
+
+  // world-anchored physics labels (project to screen each frame)
+  {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const anchors = {
+      shadow: tagAnchor.shadow,
+      ring: tagAnchor.ring,
+      doppler: tagAnchor.doppler,
+      redshift: tagAnchor.redshift,
+    };
+    const map = {};
+    for (const key of Object.keys(anchors)) {
+      const v = anchors[key].clone().project(camera.object);
+      map[key] = {
+        x: (v.x * 0.5 + 0.5) * w,
+        y: (-v.y * 0.5 + 0.5) * h,
+        visible: v.z < 1.0 && v.z > -1.0,
+      };
+    }
+    hud.placeTags(map);
+  }
 
   // geodesic background
   renderer.autoClear = true;

@@ -90,6 +90,23 @@ export class HUD {
     applyTags(this.el.inpTags ? this.el.inpTags.checked : true);
   }
 
+  /** Place annotation cards at projected screen points ({x,y,visible} per key). */
+  placeTags(map) {
+    if (!this.el.tags || !this._tagsOn) return;
+    const nodes = this.el.tags.querySelectorAll('[data-anchor]');
+    nodes.forEach((el) => {
+      const key = el.getAttribute('data-anchor');
+      const p = map[key];
+      if (!p || !p.visible) {
+        el.style.visibility = 'hidden';
+        return;
+      }
+      el.style.visibility = 'visible';
+      el.style.left = `${p.x}px`;
+      el.style.top = `${p.y}px`;
+    });
+  }
+
   toggleTags(force) {
     const next = typeof force === 'boolean' ? force : !this._tagsOn;
     this._applyTags(next);
