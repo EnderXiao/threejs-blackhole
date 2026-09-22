@@ -1,0 +1,18 @@
+{
+  "name": "threejs-kerr",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Physically-motivated Kerr black hole flight simulator (Three.js + geodesic raytracing)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

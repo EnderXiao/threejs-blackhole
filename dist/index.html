@@ -1,0 +1,102 @@
+<!-- AI生成 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kerr Black Hole Flight — 相对论观测台</title>
+    <script type="module" crossorigin src="./assets/index-DZAOvp55.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DoUnbjif.css">
+  </head>
+  <body>
+<p data-aigc-mark="1" style="margin:0 0 8px;font-size:10px;line-height:1.3;color:#6b6560;font-weight:400;">AI生成</p>
+
+    <div id="app">
+      <canvas id="gl"></canvas>
+
+      <div id="hud" class="hud">
+        <header class="hud-top">
+          <div class="brand">
+            <div class="brand-mark"></div>
+            <div>
+              <h1>KERR OBSERVATORY</h1>
+              <p>测地线光线追踪 · 旋转黑洞</p>
+            </div>
+          </div>
+          <div class="readout" id="readout">
+            <div class="row"><span>r</span><b id="val-r">—</b></div>
+            <div class="row"><span>r/r₊</span><b id="val-rh">—</b></div>
+            <div class="row"><span>θ</span><b id="val-th">—</b></div>
+            <div class="row"><span>Ω</span><b id="val-om">—</b></div>
+            <div class="row"><span>a</span><b id="val-a">0.90</b></div>
+            <div class="row"><span>捕获</span><b id="val-cap">—</b></div>
+          </div>
+        </header>
+
+        <aside class="hud-side">
+          <div class="panel">
+            <h2>时空参数</h2>
+            <label>
+              <span>自旋 a/M <em id="lbl-a">0.90</em></span>
+              <input id="inp-a" type="range" min="0" max="0.998" step="0.001" value="0.9" />
+            </label>
+            <label>
+              <span>盘倾角 <em id="lbl-i">18°</em></span>
+              <input id="inp-i" type="range" min="0" max="85" step="1" value="18" />
+            </label>
+            <label>
+              <span>积分步数 <em id="lbl-steps">96</em></span>
+              <input id="inp-steps" type="range" min="32" max="192" step="8" value="96" />
+            </label>
+            <label>
+              <span>时间流速 <em id="lbl-time">1.0</em></span>
+              <input id="inp-time" type="range" min="0" max="3" step="0.05" value="1" />
+            </label>
+            <label class="check">
+              <input id="inp-grid" type="checkbox" />
+              <span>显示时空网格</span>
+            </label>
+          </div>
+
+          <div class="panel legend">
+            <h2>物理图例</h2>
+            <ul>
+              <li><i class="dot hot"></i>多普勒增亮（接近侧）</li>
+              <li><i class="dot cool"></i>引力红移 / 远离侧</li>
+              <li><i class="dot ring"></i>光子环 / 陷光轨道</li>
+              <li><i class="dot shadow"></i>事件视界阴影</li>
+            </ul>
+          </div>
+        </aside>
+
+        <footer class="hud-bottom">
+          <div class="tips">
+            <span><kbd>WASD</kbd> 平移</span>
+            <span><kbd>QE</kbd> 升降</span>
+            <span><kbd>鼠标</kbd> 视角</span>
+            <span><kbd>Shift</kbd> 加速</span>
+            <span><kbd>Space</kbd> 暂停</span>
+            <span><kbd>H</kbd> HUD</span>
+            <span><kbd>R</kbd> 重置</span>
+          </div>
+          <p class="credit">
+            基于 Kerr 零测地线数值积分 · 参考 Carter / Luminet / James–Thorne
+          </p>
+        </footer>
+      </div>
+
+      <div id="start" class="start">
+        <div class="start-card">
+          <p class="eyebrow">GENERAL RELATIVITY · REAL-TIME</p>
+          <h1>Kerr 黑洞飞行</h1>
+          <p class="lead">
+            进入旋转黑洞的引力舞台。光线被弯曲成光子环，吸积盘被多普勒增亮，
+            时空被参考拖曳扭转——你可以自由飞行观察。
+          </p>
+          <button id="btn-start">进入观测台</button>
+          <p class="hint">点击后锁定鼠标 · ESC 释放</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
