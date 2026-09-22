@@ -183,7 +183,7 @@ void main() {
     if (i > 0 && y0 * y1 <= 0.0 && abs(y0 - y1) > 1e-6 && hitCount < 3) {
       float s = clamp(y0 / (y0 - y1), 0.0, 1.0);
       vec3 hitW = pos + vel * (dt * s);
-      if (length(hitW) > capture * 1.15) {
+      if (length(hitW) > capture * 1.02) {
         vec3 hitD = rotX * hitW;
         // physical cylindrical radius in spin-aligned disk
         col += diskEmission(vec3(hitW.x, 0.0, hitW.z), uCamPos);
@@ -228,7 +228,8 @@ void main() {
   }
 
   if (!captured && !escaped) {
-    if (length(pos) < 12.0) captured = true;
+    // only the horizon captures; leftover near-miss rays escape and sample sky/disk
+    if (length(pos) < capture * 1.15) captured = true;
     else escaped = true;
   }
 
@@ -237,11 +238,11 @@ void main() {
   if (captured) {
     if (hitCount == 0) {
       // warm olive void (not a pure cutout)
-      col = vec3(0.055, 0.05, 0.04);
+      col = vec3(0.03, 0.028, 0.022);
     }
-    // soften the silhouette: fade the void toward the edge
-    float edge = smoothstep(capture * 0.85, capture * 1.8, minR);
-    col = mix(col * 0.25, col, edge);
+    // narrow feather right at the silhouette (not a wide gray moat)
+    float edge = smoothstep(capture * 0.98, capture * 1.25, minR);
+    col = mix(col * 0.55, col, edge);
   } else {
     col += starfield(normalize(pos)) * 0.85;
     // atmospheric haze just outside the hole
