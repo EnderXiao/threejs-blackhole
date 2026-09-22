@@ -64,16 +64,17 @@ export class MatterField {
           float lenBH = max(length(toBH), 0.001);
           float lenP  = max(length(toP), 0.001);
           float cosAng = dot(toBH, toP) / (lenBH * lenP);
-          float shadowCos = cos(7.5 / max(lenBH, 1.0));
+          // Cull ONLY the true silhouette (b_c ≈ 5.2), with a soft fade —
+          // a wide hard cone left a gray "moat" of missing dust outside the ring.
+          float shadowCos = cos(5.3 / max(lenBH, 1.0));
+          float edgeCos = cos(5.9 / max(lenBH, 1.0));
           float inFront = step(lenP, lenBH + 0.5);
-          float onShadow = step(shadowCos, cosAng) * inFront;
-          // also drop anything already inside the photon-sphere radius
-          float inside = step(length(position), 5.2);
-          float vis = 1.0 - max(onShadow, inside);
+          float occl = smoothstep(edgeCos, shadowCos, cosAng) * inFront;
+          float inside = smoothstep(5.6, 4.8, length(position));
+          float vis = 1.0 - max(occl, inside);
 
           vColor = aColor * vis;
-          if (vis < 0.5) {
-            // clip away entirely (size 0 still rasterizes 1px on some GL)
+          if (vis < 0.08) {
             gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
             gl_PointSize = 0.0;
             return;
