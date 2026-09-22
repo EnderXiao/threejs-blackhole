@@ -154,14 +154,18 @@ void main() {
   // Sky polar angle around the BH in the camera plane + spin-axis projection.
   // Kerr critical curve is D-shaped / offset along the frame-dragging side
   // (Bardeen+ 1972; Gralla–Holz–Wald 2019). MUST vary across the image.
-  vec2 n2 = vec2(dot(dir, uCamBasis[0]), dot(dir, uCamBasis[1]));
-  n2 = normalize(n2 + vec2(1e-5, 0.0));
+  // Screen polar angle of the ray relative to the BH direction (not world azimuth).
+  vec3 toB = normalize(-uCamPos);
+  vec3 dperp = dir - toB * dot(dir, toB);
+  vec2 off = vec2(dot(dperp, uCamBasis[0]), dot(dperp, uCamBasis[1]));
+  vec2 soDir = (length(off) > 1e-5) ? normalize(off) : vec2(1.0, 0.0);
   vec2 sp2 = vec2(dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]), dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]));
-  sp2 = normalize(sp2 + vec2(1e-5, 0.0));
-  float cSpin = dot(n2, sp2); // +1 → 走自旋投影正侧，-1 → 负侧
-  // b_c ≈ 3√3 M, 随 a 略缩，并沿自旋侧压扁/偏移（幅度 ~0.8M @ a=1）
-  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.12 * uSpin * uSpin)
-              + 0.85 * uSpin * cSpin;
+  sp2 = (length(sp2) > 1e-5) ? normalize(sp2) : vec2(0.0, 1.0);
+  float cSpin = dot(soDir, sp2); // +1 自旋投影正侧，-1 负侧
+  // Kerr 临界曲线：沿自旋一侧压扁并偏移（D 形），幅度要够大才看得出来
+  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.1 * uSpin * uSpin)
+              + 1.45 * uSpin * cSpin
+              + 0.35 * uSpin * (cSpin * cSpin - 0.5); // 轻度二阶不对称
   bool inShadowDisk = bImp < bCrit;
 
   float ci = cos(-uIncl);
@@ -248,18 +252,22 @@ void main() {
     if (length(pos) < capture * 1.15) captured = true;
     else escaped = true;
   }
-  // Physical shadow = critical impact-parameter disk b < b_c (Gralla–Holz–Wald 2019).
+  // Physical shadow = critical impact-parameter disk b < b_c.
   if (inShadowDisk) captured = true;
 
-  // ---------- Shadow: essentially black inside the critical curve ----------
-  // Only true foreground disk (hit before winding) may show; otherwise pure void.
+  // ---------- Shadow (not a sticker) ----------
+  // Keep foreground disk so the near plate can sit ON the silhouette edge.
   if (captured) {
-    col = vec3(0.02, 0.018, 0.014);
-    // hard-ish cut at the critical curve (no wide gray moat)
-    float edge = smoothstep(bCrit - 0.02, bCrit + 0.08, bImp);
-    col = mix(col, col, edge);
+    if (hitCount == 0) {
+      col = vec3(0.025, 0.022, 0.018);
+    }
+    // soft feather into the critical curve
+    float edge = smoothstep(bCrit - 0.15, bCrit + 0.2, bImp);
+    col = mix(col * 0.4, col, edge);
   } else {
     col += starfield(normalize(pos)) * 0.85;
+    float haze = exp(-max(0.0, bImp - bCrit) * 1.2) * 0.05;
+    col += vec3(0.4, 0.32, 0.24) * haze;
   }
 
   // ---------- Photon ring: THIN bright line ON b = b_c ----------
