@@ -101,12 +101,12 @@ vec3 diskEmission(vec3 hit, vec3 camPos) {
   float om = 1.0 / (pow(max(r, 0.6), 1.5) + uSpin);
   float ang = phi - uTime * uTimeScale * om * 10.0;
 
-  // smooth differential shear (low frequency — no fingerprint moiré)
-  float sp = ang + log(max(r, 0.5)) * 1.2;
-  float f1 = 0.5 + 0.5 * sin(sp * 2.0);
-  float f2 = 0.5 + 0.5 * sin(sp * 1.0 + r * 0.35);
-  float turb = 0.55 + 0.35 * f1 * f2 + 0.1 * f1;
-  turb = clamp(turb, 0.35, 1.25);
+  // very low-frequency shear — avoid moiré fingerprints
+  float sp = ang + log(max(r, 0.5)) * 0.6;
+  float f1 = 0.5 + 0.5 * sin(sp * 1.0);
+  float f2 = 0.5 + 0.5 * sin(0.5 * sp + r * 0.15);
+  float turb = 0.7 + 0.25 * f1 + 0.1 * f2;
+  turb = clamp(turb, 0.5, 1.15);
 
   float g = gFactor(r, hit, camPos);
 
@@ -232,18 +232,26 @@ void main() {
     else escaped = true;
   }
 
-  // Shadow: keep foreground disk; soft warm void otherwise
+  // ---------- Shadow (soft / 朦胧) ----------
+  // Keep any foreground disk hits so the near plate can wrap over the silhouette.
   if (captured) {
     if (hitCount == 0) {
-      col = vec3(0.02, 0.018, 0.014);
+      // warm olive void (not a pure cutout)
+      col = vec3(0.055, 0.05, 0.04);
     }
+    // soften the silhouette: fade the void toward the edge
+    float edge = smoothstep(capture * 0.85, capture * 1.8, minR);
+    col = mix(col * 0.25, col, edge);
   } else {
-    col += starfield(normalize(pos));
+    col += starfield(normalize(pos)) * 0.85;
+    // atmospheric haze just outside the hole
+    float haze = exp(-max(0.0, minR - capture) * 0.28) * 0.06;
+    col += vec3(0.42, 0.34, 0.26) * haze;
   }
 
-  // very subtle haze near the hole (not a synthetic photon ring)
-  float soft = exp(-pow((minR - (2.8 + uSpin * 0.2)) / 0.7, 2.0)) * 0.03;
-  col += vec3(0.5, 0.4, 0.28) * soft;
+  // whisper of warm bleed at the critical curve (not a hard photon-ring band)
+  float bleed = exp(-pow((minR - (2.9 + uSpin * 0.15)) / 0.9, 2.0)) * 0.04;
+  col += vec3(0.55, 0.42, 0.28) * bleed;
 
   vec2 q = vUv - 0.5;
   col *= 1.0 - 0.08 * dot(q, q);
