@@ -58,11 +58,42 @@ export class HUD {
     this.el.inpGrid.addEventListener('change', () => {
       this.onChange.grid(this.el.inpGrid.checked);
     });
+
+    // --- tags: reliable show/hide both ways ---
+    this._tagsOn = true;
+    const applyTags = (on) => {
+      this._tagsOn = !!on;
+      const t = this.el.tags;
+      if (t) {
+        t.classList.toggle('off', !this._tagsOn);
+        t.hidden = !this._tagsOn;
+        t.style.display = this._tagsOn ? 'block' : 'none';
+        t.style.visibility = this._tagsOn ? 'visible' : 'hidden';
+        t.style.opacity = this._tagsOn ? '1' : '0';
+        t.setAttribute('aria-hidden', this._tagsOn ? 'false' : 'true');
+      }
+      if (this.el.inpTags) this.el.inpTags.checked = this._tagsOn;
+      this.onChange.tags(this._tagsOn);
+    };
+
+    this._applyTags = applyTags;
+
     this.el.inpTags?.addEventListener('change', () => {
-      const on = this.el.inpTags.checked;
-      this.el.tags?.classList.toggle('off', !on);
-      this.onChange.tags(on);
+      applyTags(this.el.inpTags.checked);
     });
+    // label clicks: sync after the checkbox flips
+    this.el.inpTags?.parentElement?.addEventListener('click', () => {
+      requestAnimationFrame(() => applyTags(this.el.inpTags.checked));
+    });
+
+    // init
+    applyTags(this.el.inpTags ? this.el.inpTags.checked : true);
+  }
+
+  toggleTags(force) {
+    const next = typeof force === 'boolean' ? force : !this._tagsOn;
+    this._applyTags(next);
+    return next;
   }
 
   toggle() {

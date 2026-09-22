@@ -47,8 +47,10 @@ export class FreeCamera {
     window.addEventListener('keyup', this._onKeyUp);
     document.addEventListener('mousemove', this._onMouseMove);
     document.addEventListener('pointerlockchange', this._onLockChange);
-    dom.addEventListener('click', () => {
-      if (this.enabled && !this.locked) dom.requestPointerLock?.();
+    dom.addEventListener('click', (e) => {
+      if (this.enabled && !this.locked && e.target === dom) {
+        dom.requestPointerLock?.();
+      }
     });
 
     this._applyRotation();

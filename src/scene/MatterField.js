@@ -91,7 +91,7 @@ export class MatterField {
         void main() {
           vec2 d = gl_PointCoord - 0.5;
           float a = smoothstep(0.5, 0.08, length(d));
-          gl_FragColor = vec4(vColor, a * 0.55);
+          gl_FragColor = vec4(vColor, a * 0.38);
         }
       `,
     });

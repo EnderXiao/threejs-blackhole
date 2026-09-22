@@ -203,8 +203,12 @@ body,
   transition: opacity 0.3s ease;
 }
 
-.tags.off {
-  opacity: 0;
+.tags.off,
+.tags[hidden] {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  display: none !important;
+  pointer-events: none !important;
 }
 
 .tag {

@@ -46,7 +46,7 @@ const quad = new THREE.Mesh(
 quadScene.add(quad);
 
 // Matter particles live in a normal perspective scene overlaid after the quad
-const matter = new MatterField(16000);
+const matter = new MatterField(11000);
 scene.add(matter.points);
 
 const hud = new HUD();
@@ -80,11 +80,23 @@ hud.onChange.grid = (v) => {
 document.getElementById('btn-start').addEventListener('click', () => {
   hud.hideStart();
   camera.setEnabled(true);
-  canvas.requestPointerLock?.();
+  // pointer-lock only when clicking the canvas (see FreeCamera)
 });
+
+// Hovering the side panel unlocks the mouse so sliders/checkboxes work
+const side = document.querySelector('.hud-side');
+const unlockPointer = () => {
+  if (document.pointerLockElement) document.exitPointerLock();
+};
+side?.addEventListener('mouseenter', unlockPointer);
+side?.addEventListener('mousedown', unlockPointer);
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyH') hud.toggle();
+  if (e.code === 'KeyT') {
+    e.preventDefault();
+    hud.toggleTags();
+  }
   if (e.code === 'KeyR') camera.reset(new THREE.Vector3(0, 7.5, 24));
   if (e.code === 'Space') {
     e.preventDefault();

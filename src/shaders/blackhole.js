@@ -212,8 +212,8 @@ void main() {
 
     col += gridGlow(pos);
 
-    // accumulate how close we swing to the photon sphere
-    ring += exp(-pow((r - rPhoton) / 0.35, 2.0)) * clamp(dt * 0.12, 0.0, 0.06);
+    // photon-sphere proximity — use MAX so intensity is independent of step count
+    ring = max(ring, exp(-pow((r - rPhoton) / 0.32, 2.0)));
     wind += abs(cross(vel, pos / max(r, 1e-3)).y) * dt * 0.02;
 
     // null geodesic force
@@ -253,27 +253,39 @@ void main() {
     else escaped = true;
   }
 
-  // ---------- 1) Event-horizon shadow ----------
+  // ---------- 1) Event-horizon shadow (soft / 朦胧) ----------
+  // Keep foreground disk hits so the near disk wraps over the silhouette
+  // instead of looking like a sticker punched on top of the plate.
   if (captured) {
-    // pure black silhouette (secondary images live on non-captured rays)
-    col = vec3(0.0);
+    if (hitCount == 0) {
+      // muted olive-warm void (matches the hazy v1 look)
+      col = vec3(0.045, 0.048, 0.038);
+    }
+    // soft blend near the silhouette edge
+    float edge = smoothstep(capture * 0.95, capture * 1.6, minR);
+    col = mix(col * 0.35, col, edge);
   } else {
-    col += starfield(normalize(pos));
+    col += starfield(normalize(pos)) * 0.85;
   }
 
-  // ---------- 2) Photon ring ----------
-  float ringGlow = clamp(ring, 0.0, 1.5);
-  float graze = exp(-pow((minR - rPhoton) / 0.18, 2.0));
-  float orderBoost = 0.7 + 1.0 * clamp(wind * 3.0, 0.0, 1.5);
+  // ---------- 2) Photon ring: very thin, step-count independent ----------
+  float graze = exp(-pow((minR - rPhoton) / 0.10, 2.0));
+  // whisper of higher-order glow (constant width — does not bloom with uSteps)
+  float halo = exp(-pow((minR - rPhoton) / 0.4, 2.0)) * 0.18;
   if (!captured) {
-    // sharp bright rim hugging the shadow
-    col += vec3(1.0, 0.95, 0.75) * (ringGlow * 3.5 + graze * 5.0) * orderBoost;
+    col += vec3(1.0, 0.92, 0.72) * (graze * 1.1 + halo);
   }
+
+  // atmospheric haze around the hole (朦胧美)
+  float haze = exp(-max(0.0, minR - capture) * 0.25) * 0.055;
+  col += vec3(0.4, 0.32, 0.24) * haze;
 
   vec2 q = vUv - 0.5;
-  col *= 1.0 - 0.12 * dot(q, q);
+  col *= 1.0 - 0.08 * dot(q, q);
 
   col = max(col, 0.0);
+  // slight lift so blacks stay soft, not crushed
+  col = mix(col, col + 0.02, 0.5);
   col = col / (1.0 + col);
   col = pow(col, vec3(0.4545));
   gl_FragColor = vec4(col, 1.0);
