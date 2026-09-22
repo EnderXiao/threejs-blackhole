@@ -249,29 +249,35 @@ void main() {
   float spAng = atan(dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]),
                      dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]));
   float aS = clamp(uSpin, 0.0, 0.998);
-  // Kerr D-shape: clearly visible at high spin (Bardeen+ 1972)
-  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.08 * aS * aS)
-              + 1.2 * aS * cos(soAng - spAng)
-              - 0.55 * aS * cos(2.0 * (soAng - spAng));
-  bCrit = max(bCrit, 2.8);
-  bool inside = bImp < bCrit;
+  // Smooth Kerr-ish critical curve: slightly elliptical + offset (no limaçon bite)
+  float rel = soAng - spAng;
+  float c = cos(rel);
+  float sn = sin(rel);
+  // semi-axes in impact-parameter space
+  float ax = 5.196 * (1.0 - 0.14 * aS);   // along spin: flatter
+  float ay = 5.196 * (1.0 + 0.04 * aS);
+  // ellipse centered with a small spin offset
+  vec2 e = vec2(bImp * c + 0.55 * aS, bImp * sn);
+  float ell = (e.x * e.x) / (ax * ax) + (e.y * e.y) / (ay * ay);
+  bool inside = ell < 1.0;
+  // radial b_c along current ray direction (for the photon ring)
+  float bCrit = length(vec2(ax * c - 0.55 * aS, ay * sn));
 
-  float db = bImp - bCrit;
-  float ring = exp(-pow(db / 0.5, 2.0));          // thick soft photon-ring glow
-  float ringCore = exp(-pow(db / 0.18, 2.0));     // brighter core of the ring
 
   vec3 ringCol = mix(vec3(1.0, 0.9, 0.7), vec3(1.0, 0.98, 0.92), ringCore);
+  // ring on the same elliptical critical curve
+  float edge = 1.0 - sqrt(max(ell, 0.0)); // 0 on boundary, 1 at center
+  float ring = exp(-pow((1.0 - ell) / 0.08, 2.0));
+  float ringCore = exp(-pow((1.0 - ell) / 0.025, 2.0));
+
   if (inside) {
-    // 近侧前景盘可以压在阴影上，而不是被黑洞涂黑
-    if (hitCount > 0) {
-      col = disk;
-    } else {
-      col = vec3(0.0);
-    }
-    col += vec3(1.0, 0.93, 0.78) * exp(-pow((bCrit - bImp) / 0.15, 2.0)) * 0.55;
+    // 前景盘只允许很淡地压在轮廓附近，避免横条盖满阴影
+    float nearEdge = smoothstep(0.55, 1.0, ell);
+    col = mix(vec3(0.0), disk * 0.35, nearEdge * step(0.5, float(hitCount)));
+    col += vec3(1.0, 0.93, 0.78) * ring * 0.5;
   } else {
     col = disk + sky;
-    col += ringCol * (ring * 2.4 + ringCore * 1.6);
+    col += ringCol * (ring * 2.6 + ringCore * 1.8);
   }
 
   vec2 q = vUv - 0.5;
