@@ -148,31 +148,23 @@ void main() {
   vec3 bvec = cross(uCamPos, dir);
   float bImp = length(bvec);
 
-  // Screen azimuth around BH; spin projects to (spx,spy)
+  // Soft circular-ish critical curve (only mild spin dent — 第一版观感优先)
   vec3 toB = normalize(-uCamPos);
   vec3 dperp = dir - toB * dot(dir, toB);
   float soAng = atan(dot(dperp, uCamBasis[1]), dot(dperp, uCamBasis[0]));
   float spAng = atan(dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]),
                      dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]));
   float rel = soAng - spAng;
-
-  // Kerr critical curve — ONE curve for shadow AND photon ring.
-  // Face-on ≈ circle; spin+inclination → offset + one-sided flatten (D).
-  float sIncl = sin(clamp(abs(uIncl) + 0.35, 0.0, 1.35));
   float a = clamp(uSpin, 0.0, 0.998);
-  float bc0 = 3.0 * sqrt(3.0); // 5.196
-  float bCrit = bc0 * (1.0 - 0.04 * a * a)
-              + 1.35 * a * sIncl * cos(rel)
-              - 0.55 * a * sIncl * cos(2.0 * rel);
-  bCrit = max(bCrit, 2.8);
+  float bCrit = 3.0 * sqrt(3.0) * (1.0 - 0.03 * a * a)
+              + 0.45 * a * cos(rel); // subtle, not a hard D
   bool inside = bImp < bCrit;
 
   vec3 col = vec3(0.0);
   bool captured = false;
   bool escaped = false;
   int hitCount = 0;
-  float minR = 1e5;
-  int steps = int(clamp(uSteps, 32.0, 128.0));
+  int steps = int(clamp(uSteps, 32.0, 160.0));
   float ci = cos(-uIncl);
   float si = sin(-uIncl);
   mat3 rotX = mat3(1.0, 0.0, 0.0,  0.0, ci, si,  0.0, -si, ci);
@@ -180,10 +172,9 @@ void main() {
   vec3 vel = dir;
   float capture = rPlus() * 1.05;
 
-  for (int i = 0; i < 128; i++) {
+  for (int i = 0; i < 160; i++) {
     if (i >= steps) break;
     float r = length(pos);
-    minR = min(minR, r);
     if (r < capture) { captured = true; break; }
     if (r > 70.0 && i > 2) { escaped = true; break; }
     float dt = clamp(r * 0.05, 0.03, 2.0);
@@ -206,43 +197,38 @@ void main() {
     vec3 acc = -1.5 * h2 * pos / (rr * rr * rr * rr * rr);
     vec3 sAxis = vec3(0.0, 1.0, 0.0);
     vec3 rhat = pos / rr;
-    vec3 Bg = (2.0 * uSpin / (rr * rr * rr)) * (3.0 * dot(sAxis, rhat) * rhat - sAxis);
-    acc += 2.0 * cross(vel, Bg);
+    acc += 2.0 * cross(vel, (2.0 * uSpin / (rr * rr * rr)) * (3.0 * dot(sAxis, rhat) * rhat - sAxis));
     vec3 p2 = pos + vel * dt;
     vec3 v2 = vel + acc * dt;
     float r2 = max(length(p2), 0.4);
     vec3 h2b = cross(p2, v2);
     float hh = dot(h2b, h2b);
     vec3 a2 = -1.5 * hh * p2 / (r2 * r2 * r2 * r2 * r2);
-    vec3 rh2 = p2 / r2;
-    a2 += 2.0 * cross(v2, (2.0 * uSpin / (r2 * r2 * r2)) * (3.0 * dot(sAxis, rh2) * rh2 - sAxis));
+    a2 += 2.0 * cross(v2, (2.0 * uSpin / (r2 * r2 * r2)) * (3.0 * dot(sAxis, p2 / r2) * (p2 / r2) - sAxis));
     pos += 0.5 * (vel + v2) * dt;
     vel += 0.5 * (acc + a2) * dt;
     float sp = length(vel);
     if (sp > 1e-5) vel *= 1.0 / sp;
   }
 
-  // ===== Composite: black core, hairline ring on b_c, disk outside =====
   vec3 disk = col;
-  vec3 sky = escaped ? starfield(normalize(pos)) * 0.85 : vec3(0.0);
+  vec3 sky = escaped ? starfield(normalize(pos)) * 0.7 : vec3(0.0);
 
-  // inside critical curve → black core (only slight foreground disk, not a lighter "body")
+  // ===== 第一版观感：纯黑视界 + 厚软金白光晕 + 金色尘埃盘 =====
   if (inside) {
-    vec3 voidCol = vec3(0.008, 0.008, 0.01);
-    // allow a whisper of foreground plate at the very rim only
-    float rim = smoothstep(bCrit - 0.35, bCrit, bImp);
-    col = mix(voidCol, mix(voidCol, disk * 0.15, rim), step(0.5, float(hitCount)));
-    if (hitCount == 0) col = voidCol;
+    col = vec3(0.0);
   } else {
     col = disk + sky;
+    // thick soft glowing ring (not a hairline) — the signature of v1
+    float t = (bImp - bCrit) / 0.55;
+    float glow = exp(-t * t);
+    // second wider bloom
+    float bloom = exp(-pow((bImp - bCrit - 0.15) / 1.1, 2.0)) * 0.55;
+    vec3 ringCol = mix(vec3(1.0, 0.92, 0.75), vec3(1.0, 0.98, 0.9), glow);
+    col += ringCol * (glow * 2.2 + bloom);
+    // soft outer halo into the dust
+    col += vec3(0.85, 0.7, 0.5) * exp(-max(0.0, bImp - bCrit) * 0.55) * 0.18;
   }
-
-  // Photon ring = same critical curve, hairline (follows D-shape with spin)
-  float db = bImp - bCrit;
-  float ring = exp(-pow(db / 0.045, 2.0));
-  col += vec3(1.0, 0.94, 0.78) * ring * 2.5;
-  // n=2 hairline just inside
-  col += vec3(1.0, 0.9, 0.72) * exp(-pow((db + 0.1) / 0.025, 2.0)) * 0.45;
 
   vec2 q = vUv - 0.5;
   col *= 1.0 - 0.08 * dot(q, q);
