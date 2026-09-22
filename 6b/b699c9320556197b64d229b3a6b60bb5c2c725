@@ -1,0 +1,16 @@
+.gitignore
+  h_1edca6cb63ac1c 1-16
+package-lock.json
+  h_1edca6cb63ac1c 1-1131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6bb699c9320556197b64d229b3a6b60bb5c2c725",
+  "prompts": {},
+  "humans": {
+    "h_1edca6cb63ac1c": {
+      "author": "xiaoganyun <xiaoganyun@xiaomi.com>"
+    }
+  }
+}
