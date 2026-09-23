@@ -203,17 +203,31 @@ void main() {
   // initial (r,th,pr,pth), E=1, Lz from local angular momentum
   float S0 = sigmaF(r0, th0, aG);
   float D0 = max(deltaF(r0, aG), 1e-3);
-  float pr0 = n.x * sqrt(S0 / D0) * D0; // rough: p_r = g_rr dr/dλ
-  float pth0 = n.y * S0 / max(r0, 1.0);
+  float pr0 = n.x;                 // 远区 g_rr→1
+  float pth0 = n.y * r0;           // p_θ ≈ r n_θ
   float s0 = max(abs(sin(th0)), 1e-3);
-  float Lz = n.z * r0 * s0 + aG * 0.3;
+  float Lz = n.z * r0 * s0;        // p_φ
+
   float E = 1.0;
 
   vec4 st = vec4(r0, th0, pr0, pth0);
   float ph = ph0;
 
+  // 几何薄盘兜底：视线∩赤道面，保证吸积盘可见
   vec3 col = vec3(0.0);
   vec3 frontDisk = vec3(0.0);
+  {
+    float denom = dirW.y;
+    if (abs(denom) > 1e-4) {
+      float tg = -uCamPos.y / denom;
+      if (tg > 0.05 && tg < length(uCamPos) * 1.2) {
+        vec3 hitG = uCamPos + dirW * tg;
+        float rg = length(hitG.xz);
+        col += diskShade(rg, atan(hitG.z, hitG.x), vec3(hitG.x, 0.0, hitG.z), uCamPos, aD);
+        if (tg < length(uCamPos)) frontDisk = col;
+      }
+    }
+  }
   float vol = 0.0;
   vec3 volCol = vec3(0.0);
   bool captured = false;
