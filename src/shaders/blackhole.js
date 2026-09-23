@@ -249,27 +249,23 @@ void main() {
   float spAng = atan(dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]),
                      dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]));
   float aS = clamp(uSpin, 0.0, 0.998);
-  // Kerr D-shape: circle clipped by a chord on the frame-dragging side
-  // (Bardeen+ 1972). NOT an ellipse — one side is genuinely flat.
+  // Kerr critical curve (Bardeen+ 1972; Johannsen 2013; Gralla–Holz–Wald 2019):
+  // a nearly circular closed curve — one side gently flattened & the center
+  // offset with spin+inclination. NOT a letter-D chord cut, NOT a hard ellipse.
   float rel = soAng - spAng;
-  float c = cos(rel);
-  float sn = sin(rel);
-  float R = 5.196;
-  // impact-plane coords (spin along +x after this basis)
-  vec2 p = vec2(bImp * c + 0.55 * aS, bImp * sn);
-  // chord: flat side advances toward center as a grows
-  float chord = -R * (1.0 - 0.62 * aS);
-  float circleSdf = length(p) - R * (1.0 - 0.05 * aS * aS);
-  float planeSdf = chord - p.x;          // <0 when to the right of the chord
-  float dSdf = max(circleSdf, planeSdf); // intersection = D
-  bool inside = dSdf < 0.0;
-  float ell = clamp(0.5 - dSdf * 0.25, 0.0, 1.5); // reuse name for ring falloff
-  float bCrit = length(p);
+  float a2 = aS * aS;
+  float R0 = 3.0 * sqrt(3.0); // 5.196
+  // mild egg/D: r(φ) = R0 (1 + c1 a cos φ + c2 a² cos 2φ), c1²<1 ⇒ smooth convex
+  float rC = R0 * (1.0 - 0.04 * a2)
+           * (1.0 + 0.22 * aS * cos(rel) + 0.07 * a2 * cos(2.0 * rel));
+  bool inside = bImp < rC;
+  // normalized residual for the ring (0 on the critical curve)
+  float dSdf = bImp - rC;
+  float bCrit = rC;
+  float ell = 1.0;
 
-
-  // Photon ring lives on the SAME ellipse as the shadow (ell = 1).
-  float ring = exp(-pow(dSdf / 0.4, 2.0));
-  float ringCore = exp(-pow(dSdf / 0.12, 2.0));
+  float ring = exp(-pow(dSdf / 0.45, 2.0));
+  float ringCore = exp(-pow(dSdf / 0.1, 2.0));
   vec3 ringCol = mix(vec3(1.0, 0.9, 0.72), vec3(1.0, 0.98, 0.92), ringCore);
 
   if (inside) {
