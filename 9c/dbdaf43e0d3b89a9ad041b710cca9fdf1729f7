@@ -1,0 +1,18 @@
+dist/index.html
+  h_1edca6cb63ac1c 8-9
+src/camera/FreeCamera.js
+  h_1edca6cb63ac1c 57,126-176
+src/styles.css
+  h_1edca6cb63ac1c 25-26,36-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9cdbdaf43e0d3b89a9ad041b710cca9fdf1729f7",
+  "prompts": {},
+  "humans": {
+    "h_1edca6cb63ac1c": {
+      "author": "xiaoganyun <xiaoganyun@xiaomi.com>"
+    }
+  }
+}
