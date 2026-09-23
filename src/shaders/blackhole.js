@@ -256,8 +256,9 @@ void main() {
   float a2 = aS * aS;
   float R0 = 3.0 * sqrt(3.0); // 5.196
   // mild egg/D: r(φ) = R0 (1 + c1 a cos φ + c2 a² cos 2φ), c1²<1 ⇒ smooth convex
-  float rC = R0 * (1.0 - 0.04 * a2)
-           * (1.0 + 0.22 * aS * cos(rel) + 0.07 * a2 * cos(2.0 * rel));
+  // 文献量级：近圆，仅一侧略扁 + 轻微偏移（不是鸭蛋）
+  float rC = R0 * (1.0 - 0.02 * a2)
+           * (1.0 + 0.10 * aS * cos(rel) + 0.025 * a2 * cos(2.0 * rel));
   bool inside = bImp < rC;
   // normalized residual for the ring (0 on the critical curve)
   float dSdf = bImp - rC;

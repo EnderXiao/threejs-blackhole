@@ -80,10 +80,11 @@ export class MatterField {
           // approximate semi-axes in NDC for b_c≈5.2 at current camera distance
           float camDist = max(length(uCamPos), 1.0);
           float pix = (5.2 / camDist) / tan(0.5); // rough NDC scale
-          float axn = pix * (1.0 - 0.32 * 0.9);
-          float ayn = pix * (1.0 + 0.10 * 0.9);
+          // cover the full shadow + photon ring (generous)
+          float axn = pix * 1.25;
+          float ayn = pix * 1.25;
           float ell = (dxy.x * dxy.x) / (axn * axn) + (dxy.y * dxy.y) / (ayn * ayn);
-          vis *= smoothstep(1.0, 1.25, ell);
+          vis *= smoothstep(0.85, 1.2, ell);
 
           vColor = aColor * vis;
           if (vis < 0.08) {
