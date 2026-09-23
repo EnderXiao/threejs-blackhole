@@ -216,6 +216,28 @@ void main() {
       }
     }
 
+    // ---- 立体厚盘（气环/圆环体积）：沿光线累积，洞周围处处有物质 ----
+    {
+      float cylR = length(pos.xz);
+      float rInV = rIsco() * 0.9;
+      float rOutV = 13.0;
+      if (cylR > rInV && cylR < rOutV && abs(pos.y) < 2.5) {
+        // flared scale height H ∝ r
+        float H = 0.12 * cylR + 0.25;
+        float dens = exp(-pow(pos.y / H, 2.0)) * exp(-pow((cylR - rInV) / (rOutV - rInV), 1.5) * 2.5);
+        float gL = gFactor(cylR, vec3(pos.x, 0.0, pos.z), uCamPos);
+        float beamL = pow(clamp(gL, 0.3, 2.6), 2.4);
+        float tempL = clamp(pow(max(rInV / cylR, 0.05), 0.75), 0.0, 1.0);
+        vec3 cL = mix(vec3(0.7, 0.15, 0.04), vec3(1.0, 0.7, 0.3), tempL);
+        cL = mix(cL, vec3(1.0, 0.98, 0.9), smoothstep(1.0, 1.6, gL));
+        // shear streaks
+        float phiL = atan(pos.z, pos.x);
+        float omL = 1.0 / (pow(max(cylR, 0.6), 1.5) + uSpin);
+        float streak = 0.65 + 0.35 * sin(phiL - uTime * uTimeScale * omL * 6.0 + log(max(cylR,1.0)) * 2.0);
+        col += cL * dens * beamL * streak * dt * 4.5;
+      }
+    }
+
     col += gridGlow(pos);
 
     // null geodesic: Schwarzschild exact spatial form + Kerr frame dragging
