@@ -257,9 +257,14 @@ void main() {
   float a2 = aS * aS;
   float R0 = 3.0 * sqrt(3.0); // 5.196
   // mild egg/D: r(φ) = R0 (1 + c1 a cos φ + c2 a² cos 2φ), c1²<1 ⇒ smooth convex
-  // 文献量级：近圆，仅一侧略扁 + 轻微偏移（不是鸭蛋）
-  float rC = R0 * (1.0 - 0.02 * a2)
-           * (1.0 + 0.10 * aS * cos(rel) + 0.025 * a2 * cos(2.0 * rel));
+  // Johannsen 2013: Kerr 光子环几乎正圆，仅极高速自旋才明显不对称；
+  // 形变与偏移 ∝ a·sin(inclination)。正视 (spin∥view) 时 spLen≈0 → 圆。
+  float spx = dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]);
+  float spy = dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]);
+  float spLen = clamp(length(vec2(spx, spy)), 0.0, 1.0); // 0=正视, 1=侧视
+  float deform = aS * spLen;
+  float rC = R0 * (1.0 - 0.015 * a2)
+           * (1.0 + 0.14 * deform * cos(rel) + 0.03 * deform * cos(2.0 * rel));
   bool inside = bImp < rC;
   // normalized residual for the ring (0 on the critical curve)
   float dSdf = bImp - rC;
