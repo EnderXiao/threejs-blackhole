@@ -95,32 +95,51 @@ vec3 diskEmission(vec3 hit, vec3 camPos) {
   float r = length(hit.xz);
   float phi = atan(hit.z, hit.x);
   float rIn = rIsco();
-  float rOut = 13.5;
+  float rOut = 14.5;
   if (r < rIn - 0.15 || r > rOut) return vec3(0.0);
 
   float om = 1.0 / (pow(max(r, 0.6), 1.5) + uSpin);
-  float ang = phi - uTime * uTimeScale * om * 10.0;
+  float ang = phi - uTime * uTimeScale * om * 8.0;
+  // smooth shear filaments
+  float sp = ang + log(max(r, 0.5)) * 1.0;
+  float f1 = 0.5 + 0.5 * sin(sp * 2.5);
+  float f2 = 0.5 + 0.5 * sin(sp * 1.2 + r * 0.25);
+  float turb = 0.55 + 0.35 * f1 * f2 + 0.15 * f1;
 
-  // very low-frequency shear — avoid moiré fingerprints
-  float sp = ang + log(max(r, 0.5)) * 0.6;
-  float f1 = 0.5 + 0.5 * sin(sp * 1.0);
-  float f2 = 0.5 + 0.5 * sin(0.5 * sp + r * 0.15);
-  float turb = 0.7 + 0.25 * f1 + 0.1 * f2;
-  turb = clamp(turb, 0.5, 1.15);
-
+  // --- relativistic g (Doppler × gravitational redshift) ---
   float g = gFactor(r, hit, camPos);
 
   float t = clamp((r - rIn) / (rOut - rIn), 0.0, 1.0);
-  float radial = exp(-t * 2.8) * smoothstep(rIn, rIn + 0.3, r);
-  radial *= 1.0 - smoothstep(rOut - 2.0, rOut, r);
+  // thin disk profile, sharp inner rim
+  float radial = exp(-t * 3.2) * smoothstep(rIn, rIn + 0.12, r);
+  radial *= 1.0 - smoothstep(rOut - 1.8, rOut, r);
 
-  float temp = clamp(pow(max(rIn / r, 0.05), 0.7), 0.0, 1.0);
-  float inten = turb * radial * pow(g, 3.0) * (0.45 + 0.55 * temp);
+  // temperature: white-hot inner → gold → deep red outer
+  float temp = clamp(pow(max(rIn / r, 0.05), 0.75), 0.0, 1.0);
 
-  vec3 col = tempRGB(clamp(temp * mix(0.75, 1.15, clamp(g, 0.0, 1.4)), 0.0, 1.0));
-  col *= mix(vec3(1.1, 0.35, 0.22), vec3(1.1, 1.05, 0.95), smoothstep(0.7, 1.3, g));
+  // I_obs = g³ I_em  (relativistic beaming)
+  float beam = pow(clamp(g, 0.15, 3.0), 3.0);
+  float inten = turb * radial * beam * (0.55 + 0.85 * temp);
+  // inner rim blaze
+  inten += exp(-abs(r - rIn) * 3.5) * 1.4 * beam;
+  // photon-ring neighborhood boost
+  inten += exp(-abs(r - 3.0) * 1.2) * 0.35 * beam;
 
-  return col * inten * 5.0;
+  // cinematic color: approaching (g>1) → blinding cream-white
+  //                 receding  (g<1) → deep ember red
+  //                 strong grav (inner) → orange-red shift
+  vec3 hotWhite = vec3(1.0, 0.98, 0.92);
+  vec3 gold     = vec3(1.0, 0.72, 0.28);
+  vec3 ember    = vec3(0.85, 0.18, 0.05);
+  vec3 deepRed  = vec3(0.45, 0.05, 0.02);
+
+  vec3 col = mix(ember, gold, clamp(temp * 1.2, 0.0, 1.0));
+  col = mix(col, hotWhite, smoothstep(1.05, 1.8, g) * 0.85);
+  col = mix(col, deepRed, smoothstep(0.85, 0.35, g) * 0.75);
+  // gravitational redshift near hole
+  col = mix(col, deepRed, (1.0 - clamp(g, 0.0, 1.0)) * 0.45 * (1.0 - temp));
+
+  return col * inten * 7.5;
 }
 
 vec3 gridGlow(vec3 p) {
