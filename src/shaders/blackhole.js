@@ -271,8 +271,20 @@ void main() {
   vec3 ringCol = mix(vec3(1.0, 0.9, 0.72), vec3(1.0, 0.98, 0.92), ringCore);
 
   if (inside) {
-    // 近侧吸积盘压在阴影上（远侧在洞后，不画进阴影）
+    // 近侧盘：视线与盘面几何求交（在洞之前）→ 压在阴影上
     col = frontDisk;
+    if (hitCount == 0) {
+      vec3 nrm = normalize(vec3(sin(-uIncl), cos(-uIncl), 0.0));
+      float denom = dot(dir, nrm);
+      if (abs(denom) > 1e-3) {
+        float t = -dot(uCamPos, nrm) / denom;
+        float dCam = length(uCamPos);
+        if (t > 0.05 && t < dCam * 0.98) {
+          vec3 hit = uCamPos + dir * t;
+          col = diskEmission(vec3(hit.x, 0.0, hit.z), uCamPos);
+        }
+      }
+    }
     col += ringCol * ring * 0.85;
   } else {
     col = disk + sky;
