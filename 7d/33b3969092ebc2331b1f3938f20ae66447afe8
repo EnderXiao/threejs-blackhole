@@ -1,0 +1,18 @@
+dist/index.html
+  h_1edca6cb63ac1c 8
+src/scene/MatterField.js
+  h_1edca6cb63ac1c 83-85,87
+src/shaders/blackhole.js
+  h_1edca6cb63ac1c 259-261
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "7d33b3969092ebc2331b1f3938f20ae66447afe8",
+  "prompts": {},
+  "humans": {
+    "h_1edca6cb63ac1c": {
+      "author": "xiaoganyun <xiaoganyun@xiaomi.com>"
+    }
+  }
+}
