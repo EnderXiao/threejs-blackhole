@@ -276,18 +276,21 @@ void main() {
   vec3 ringCol = mix(vec3(1.0, 0.9, 0.72), vec3(1.0, 0.98, 0.92), ringCore);
 
   if (inside) {
-    // 近侧盘：视线与盘面几何求交（在洞之前）→ 压在阴影上
-    col = frontDisk;
-    if (hitCount == 0) {
-      vec3 nrm = normalize(vec3(sin(-uIncl), cos(-uIncl), 0.0));
-      float denom = dot(dir, nrm);
-      if (abs(denom) > 1e-3) {
-        float t = -dot(uCamPos, nrm) / denom;
-        float dCam = length(uCamPos);
-        if (t > 0.05 && t < dCam * 0.98) {
-          vec3 hit = uCamPos + dir * t;
-          col = diskEmission(vec3(hit.x, 0.0, hit.z), uCamPos);
-        }
+    // 仅「真正靠近观测者的近侧盘」可压在阴影上，避免穿模
+    col = vec3(0.0);
+    vec3 nrm = normalize(vec3(sin(-uIncl), cos(-uIncl), 0.0));
+    float denom = dot(dir, nrm);
+    float dCam = max(length(uCamPos), 1.0);
+    if (abs(denom) > 1e-3) {
+      float t = -dot(uCamPos, nrm) / denom;
+      vec3 hit = uCamPos + dir * t;
+      float along = t / dCam; // 0=camera, 1=BH
+      // near plate only: clearly in front of the hole
+      if (t > 0.05 && along < 0.62) {
+        vec3 plate = diskEmission(vec3(hit.x, 0.0, hit.z), uCamPos);
+        // 只允许阴影下缘一带，中心保持黑（防整盘穿模）
+        float rim = smoothstep(0.15, 0.75, dSdf / max(rC, 1.0) + 0.5);
+        col = plate * rim * 0.85;
       }
     }
     col += ringCol * ring * 0.85;
