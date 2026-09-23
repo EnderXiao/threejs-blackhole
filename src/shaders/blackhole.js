@@ -152,6 +152,7 @@ void main() {
   mat3 rotX = mat3(1.0, 0.0, 0.0,  0.0, ci, si,  0.0, -si, ci);
 
   vec3 col = vec3(0.0);
+  vec3 frontDisk = vec3(0.0);
   bool captured = false;
   bool escaped = false;
   int hitCount = 0;
@@ -270,9 +271,8 @@ void main() {
   vec3 ringCol = mix(vec3(1.0, 0.9, 0.72), vec3(1.0, 0.98, 0.92), ringCore);
 
   if (inside) {
-    // 第一版观感：阴影内纯黑，不把盘画成横条盖上去
-    col = vec3(0.0);
-    // 环的内侧轻渗光，保持「贴边」
+    // 近侧吸积盘压在阴影上（远侧在洞后，不画进阴影）
+    col = frontDisk;
     col += ringCol * ring * 0.85;
   } else {
     col = disk + sky;
