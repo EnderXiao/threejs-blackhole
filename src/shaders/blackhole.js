@@ -118,7 +118,7 @@ vec3 diskEmission(vec3 hit, vec3 camPos) {
   float temp = clamp(pow(max(rIn / r, 0.05), 0.75), 0.0, 1.0);
 
   // I_obs = g³ I_em  (relativistic beaming)
-  float beam = pow(clamp(g, 0.15, 3.0), 3.0);
+  float beam = pow(clamp(g, 0.35, 2.6), 2.4); // 背侧不过暗，整圈盘可见
   float inten = turb * radial * beam * (0.55 + 0.85 * temp);
   // inner rim blaze
   inten += exp(-abs(r - rIn) * 3.5) * 1.4 * beam;
@@ -295,8 +295,12 @@ void main() {
   vec3 ringCol = mix(vec3(1.0, 0.9, 0.72), vec3(1.0, 0.98, 0.92), ringCore);
 
   if (inside) {
-    // 只用测地线 first-hit 近侧盘（与外侧同一盘面，避免断线横带）
-    col = frontDisk * 0.9;
+    // 近侧盘亮带（Luminet）：加宽柔化，与环外盘在轮廓处衔接
+    vec3 plate = frontDisk * 1.6;
+    // 底部更亮、中心稍淡，避免细线感
+    float vUp = clamp(dot(normalize(dir - toB * dot(dir, toB)), uCamBasis[1]), -1.0, 1.0);
+    float band = smoothstep(0.55, -0.4, vUp);
+    col = plate * (0.35 + 0.75 * band);
     col += ringCol * ring * 0.85;
   } else {
     col = disk + sky;
