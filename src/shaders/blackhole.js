@@ -286,11 +286,14 @@ void main() {
       vec3 hit = uCamPos + dir * t;
       float along = t / dCam; // 0=camera, 1=BH
       // near plate only: clearly in front of the hole
-      if (t > 0.05 && along < 0.62) {
+      // 近侧盘：允许覆盖阴影靠下半部（Luminet 亮带），中心仍保持较暗
+      if (t > 0.05 && along < 0.78) {
         vec3 plate = diskEmission(vec3(hit.x, 0.0, hit.z), uCamPos);
-        // 只允许阴影下缘一带，中心保持黑（防整盘穿模）
-        float rim = smoothstep(0.15, 0.75, dSdf / max(rC, 1.0) + 0.5);
-        col = plate * rim * 0.85;
+        // 下缘强、中心弱 —— 不是整盘切进洞
+        float vUp = clamp(dot(normalize(dir - toB * dot(dir, toB)), uCamBasis[1]), -1.0, 1.0);
+        float band = smoothstep(0.35, -0.15, vUp); // 偏下更亮
+        float core = smoothstep(0.0, 0.55, 1.0 - (bImp / max(rC, 1.0)));
+        col = plate * band * mix(0.35, 1.15, 1.0 - core);
       }
     }
     col += ringCol * ring * 0.85;
