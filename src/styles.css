@@ -22,6 +22,8 @@
 html,
 body,
 #app {
+  touch-action: none;
+  overscroll-behavior: none;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -31,6 +33,9 @@ body,
 }
 
 #gl {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
   position: absolute;
   inset: 0;
   width: 100%;

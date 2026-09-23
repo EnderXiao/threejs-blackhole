@@ -54,6 +54,7 @@ export class FreeCamera {
     });
 
     this._applyRotation();
+    this._bindTouch(dom);
   }
 
   setEnabled(v) {
@@ -120,6 +121,57 @@ export class FreeCamera {
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(q);
     const m = new THREE.Matrix4().makeBasis(right, up, forward);
     return new THREE.Matrix3().setFromMatrix4(m);
+  }
+
+  // ---- mobile: one-finger look, two-finger pinch dolly ----
+  _bindTouch(dom) {
+    this._touch = { id: null, x: 0, y: 0, pinch: 0 };
+    dom.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        this._touch.id = e.touches[0].identifier;
+        this._touch.x = e.touches[0].clientX;
+        this._touch.y = e.touches[0].clientY;
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        this._touch.pinch = Math.hypot(dx, dy);
+      }
+      e.preventDefault();
+    }, { passive: false });
+
+    dom.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && this.enabled) {
+        const t = e.touches[0];
+        const mx = Math.max(-80, Math.min(80, t.clientX - this._touch.x));
+        const my = Math.max(-80, Math.min(80, t.clientY - this._touch.y));
+        this._touch.x = t.clientX;
+        this._touch.y = t.clientY;
+        this.yaw -= mx * 0.005;
+        this.pitch -= my * 0.005;
+        this.pitch = Math.max(-1.45, Math.min(1.45, this.pitch));
+      } else if (e.touches.length === 2 && this.enabled) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const delta = dist - this._touch.pinch;
+        this._touch.pinch = dist;
+        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(this.object.quaternion);
+        this.object.position.addScaledVector(dir, delta * 0.05);
+        const r = this.object.position.length();
+        if (r < 3.2) this.object.position.multiplyScalar(3.2 / r);
+        if (r > 55) this.object.position.multiplyScalar(55 / r);
+      }
+    }, { passive: false });
+
+    dom.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        this._touch.id = e.touches[0].identifier;
+        this._touch.x = e.touches[0].clientX;
+        this._touch.y = e.touches[0].clientY;
+      }
+    }, { passive: false });
   }
 
   dispose() {
