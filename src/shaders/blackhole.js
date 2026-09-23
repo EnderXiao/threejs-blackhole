@@ -295,26 +295,8 @@ void main() {
   vec3 ringCol = mix(vec3(1.0, 0.9, 0.72), vec3(1.0, 0.98, 0.92), ringCore);
 
   if (inside) {
-    // 仅「真正靠近观测者的近侧盘」可压在阴影上，避免穿模
-    col = vec3(0.0);
-    vec3 nrm = normalize(vec3(sin(-uIncl), cos(-uIncl), 0.0));
-    float denom = dot(dir, nrm);
-    float dCam = max(length(uCamPos), 1.0);
-    if (abs(denom) > 1e-3) {
-      float t = -dot(uCamPos, nrm) / denom;
-      vec3 hit = uCamPos + dir * t;
-      float along = t / dCam; // 0=camera, 1=BH
-      // near plate only: clearly in front of the hole
-      // 近侧盘：允许覆盖阴影靠下半部（Luminet 亮带），中心仍保持较暗
-      if (t > 0.05 && along < 0.78) {
-        vec3 plate = diskEmission(vec3(hit.x, 0.0, hit.z), uCamPos);
-        // 下缘强、中心弱 —— 不是整盘切进洞
-        float vUp = clamp(dot(normalize(dir - toB * dot(dir, toB)), uCamBasis[1]), -1.0, 1.0);
-        float band = smoothstep(0.35, -0.15, vUp); // 偏下更亮
-        float core = smoothstep(0.0, 0.55, 1.0 - (bImp / max(rC, 1.0)));
-        col = plate * band * mix(0.35, 1.15, 1.0 - core);
-      }
-    }
+    // 只用测地线 first-hit 近侧盘（与外侧同一盘面，避免断线横带）
+    col = frontDisk * 0.9;
     col += ringCol * ring * 0.85;
   } else {
     col = disk + sky;
