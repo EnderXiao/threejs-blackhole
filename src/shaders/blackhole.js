@@ -7,13 +7,14 @@ void main() {
 `;
 
 /**
- * Kerr-inspired null-geodesic raytracer (stable Cartesian form + frame dragging).
- * Photon ring / secondary image emerge from bent paths hitting the disk.
- * Disk uses relativistic g-factor (Doppler + gravitational redshift).
+ * Kerr null-geodesic raytracer — Hamiltonian RK4 (theyashl / CuplexUser style).
+ *   H = 1/2 g^{uv} p_u p_v,  state=(r,θ,p_r,p_θ), conserved E, Lz
+ * Disk: Novikov–Thorne T ∝ (r_in/r)^{3/4} + fbm turbulence, volumetric puff.
+ * Geodesics integrated with spin -a (time-reversed rays, CuplexUser).
+ * Post: ACES + soft bloom.
  */
 export const blackholeFrag = /* glsl */ `
 precision highp float;
-
 varying vec2 vUv;
 
 uniform vec2 uResolution;
@@ -27,36 +28,137 @@ uniform float uIncl;
 uniform bool uShowGrid;
 uniform float uTimeScale;
 
-float rPlus() {
-  return 1.0 + sqrt(max(0.0, 1.0 - uSpin * uSpin));
-}
+const float PI = 3.14159265359;
 
-float rIsco() {
-  float a = clamp(uSpin, 0.0, 0.998);
+float rPlus(float a) { return 1.0 + sqrt(max(0.0, 1.0 - a * a)); }
+
+float rIsco(float a) {
+  a = clamp(a, 0.0, 0.998);
   float z1 = 1.0 + pow(max(1.0 - a * a, 0.0), 1.0 / 3.0) *
                  (pow(1.0 + a, 1.0 / 3.0) + pow(1.0 - a, 1.0 / 3.0));
   float z2 = sqrt(3.0 * a * a + z1 * z1);
   return 3.0 + z2 - sqrt(max(0.0, (3.0 - z1) * (3.0 + z1 + 2.0 * z2)));
 }
 
-vec3 tempRGB(float t) {
+float sigmaF(float r, float th, float a) {
+  float c = cos(th);
+  return r * r + a * a * c * c;
+}
+float deltaF(float r, float a) { return r * r - 2.0 * r + a * a; }
+float bigAF(float r, float th, float a) {
+  float s = sin(th);
+  float r2a2 = r * r + a * a;
+  return r2a2 * r2a2 - a * a * deltaF(r, a) * s * s;
+}
+
+// H = 1/2 g^{uv} p_u p_v ; st = (r, th, pr, pth); pt=-E, pphi=Lz
+float hamiltonian(vec4 st, float E, float Lz, float a) {
+  float r = st.x, th = st.y, pr = st.z, pth = st.w;
+  float S = sigmaF(r, th, a), D = max(deltaF(r, a), 1e-4), A = max(bigAF(r, th, a), 1e-4);
+  float s = max(abs(sin(th)), 1e-3), s2 = s * s;
+  float gtt = -A / (S * D);
+  float gtp = -2.0 * a * r / (S * D);
+  float grr = D / S;
+  float gthth = 1.0 / S;
+  float gpp = (D - a * a * s2) / (S * D * s2);
+  return 0.5 * (gtt * E * E - 2.0 * gtp * E * Lz + gpp * Lz * Lz + grr * pr * pr + gthth * pth * pth);
+}
+
+vec4 rhs(vec4 st, float E, float Lz, float a, out float dphi) {
+  float r = st.x, th = st.y, pr = st.z, pth = st.w;
+  float S = sigmaF(r, th, a), D = max(deltaF(r, a), 1e-4);
+  float s = max(abs(sin(th)), 1e-3), s2 = s * s;
+  float grr = D / S, gthth = 1.0 / S;
+  float gtp = -2.0 * a * r / (S * D);
+  float gpp = (D - a * a * s2) / (S * D * s2);
+  float dr = grr * pr;
+  float dth = gthth * pth;
+  dphi = gtp * (-E) + gpp * Lz;
+  float h = 1e-3;
+  float dHdr = (hamiltonian(vec4(r + h, th, pr, pth), E, Lz, a)
+              - hamiltonian(vec4(r - h, th, pr, pth), E, Lz, a)) / (2.0 * h);
+  float dHdth = (hamiltonian(vec4(r, th + h, pr, pth), E, Lz, a)
+               - hamiltonian(vec4(r, th - h, pr, pth), E, Lz, a)) / (2.0 * h);
+  return vec4(dr, dth, -dHdr, -dHdth);
+}
+
+// Novikov–Thorne + fbm
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  float a = hash21(i), b = hash21(i + vec2(1, 0));
+  float c = hash21(i + vec2(0, 1)), d = hash21(i + vec2(1, 1));
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float fbm(vec2 p) {
+  float s = 0.0, amp = 0.5;
+  for (int i = 0; i < 4; i++) {
+    s += amp * vnoise(p);
+    p *= 2.03;
+    amp *= 0.5;
+  }
+  return s;
+}
+
+vec3 blackbody(float t) {
   t = clamp(t, 0.0, 1.0);
-  vec3 c0 = vec3(0.4, 0.04, 0.02);
-  vec3 c1 = vec3(0.95, 0.22, 0.04);
-  vec3 c2 = vec3(1.0, 0.6, 0.14);
-  vec3 c3 = vec3(1.0, 0.9, 0.65);
-  vec3 c4 = vec3(1.0, 0.97, 0.9);
-  if (t < 0.25) return mix(c0, c1, t / 0.25);
-  if (t < 0.55) return mix(c1, c2, (t - 0.25) / 0.3);
-  if (t < 0.85) return mix(c2, c3, (t - 0.55) / 0.3);
-  return mix(c3, c4, (t - 0.85) / 0.15);
+  vec3 c0 = vec3(0.35, 0.05, 0.02);
+  vec3 c1 = vec3(0.9, 0.2, 0.05);
+  vec3 c2 = vec3(1.0, 0.65, 0.25);
+  vec3 c3 = vec3(1.0, 0.95, 0.85);
+  if (t < 0.35) return mix(c0, c1, t / 0.35);
+  if (t < 0.7) return mix(c1, c2, (t - 0.35) / 0.35);
+  return mix(c2, c3, (t - 0.7) / 0.3);
+}
+
+// Doppler × gravitational g for Kerr circular orbit at radius r (spin +a for disk)
+float gDisk(float r, vec3 hit, vec3 camPos, float aD) {
+  float om = 1.0 / (pow(max(r, 0.6), 1.5) + aD);
+  vec3 v = vec3(-om * hit.z, 0.0, om * hit.x);
+  float speed = clamp(length(v), 0.0, 0.9);
+  v = normalize(v + vec3(1e-4, 0.0, 0.0));
+  vec3 toObs = normalize(camPos - hit);
+  float cosA = dot(v, toObs);
+  float gamma = 1.0 / sqrt(max(1.0 - speed * speed, 1e-3));
+  float dop = 1.0 / max(gamma * (1.0 - speed * cosA), 0.12);
+  float grav = sqrt(max(0.05, 1.0 - 3.0 / r + 2.0 * aD / pow(r, 1.5)));
+  return clamp(dop * grav, 0.2, 2.8);
+}
+
+vec3 diskShade(float r, float phi, vec3 hit, vec3 camPos, float aD) {
+  float rIn = rIsco(aD);
+  float rOut = 14.0;
+  if (r < rIn - 0.05 || r > rOut) return vec3(0.0);
+
+  float g = gDisk(r, hit, camPos, aD);
+  // Novikov–Thorne T ∝ (r_in/r)^{3/4}
+  float temp = pow(max(rIn / r, 0.05), 0.75);
+  float t = clamp((r - rIn) / (rOut - rIn), 0.0, 1.0);
+  float radial = smoothstep(rIn, rIn + 0.08, r) * exp(-t * 3.0);
+  radial *= 1.0 - smoothstep(rOut - 2.0, rOut, r);
+
+  // fbm turbulence + Keplerian shear
+  float om = 1.0 / (pow(max(r, 0.6), 1.5) + aD);
+  vec2 uv = vec2(phi * 1.2 - uTime * uTimeScale * om * 6.0, log(max(r, 1.0)) * 2.5);
+  float turb = 0.55 + 0.55 * fbm(uv * 1.8);
+
+  float beam = pow(clamp(g, 0.3, 2.5), 2.5);
+  float inten = turb * radial * beam * (0.4 + 0.9 * temp);
+  inten += exp(-abs(r - rIn) * 4.0) * 1.2 * beam;
+
+  vec3 col = blackbody(clamp(temp * mix(0.8, 1.15, clamp(g, 0.0, 1.4)), 0.0, 1.0));
+  col *= mix(vec3(1.1, 0.35, 0.2), vec3(1.05, 1.0, 0.92), smoothstep(0.75, 1.35, g));
+  return col * inten * 6.0;
 }
 
 vec3 starfield(vec3 dir) {
   vec3 d = normalize(dir);
   vec3 col = vec3(0.002, 0.003, 0.007);
-  float band = exp(-pow(d.y * 1.2 + 0.08, 2.0) * 2.0);
-  col += vec3(0.008, 0.012, 0.022) * band;
   for (int i = 0; i < 3; i++) {
     float scale = 50.0 + float(i) * 80.0;
     vec3 gp = d * scale + float(i) * 11.1;
@@ -64,276 +166,150 @@ vec3 starfield(vec3 dir) {
     vec3 f = fract(gp) - 0.5;
     float n = fract(sin(dot(id, vec3(127.1, 311.7, 74.7))) * 43758.5453);
     if (n < 0.8) continue;
-    float n2 = fract(n * 39.3);
     float star = smoothstep(0.2, 0.0, length(f));
-    float br = (n2 - 0.8) / 0.2;
-    vec3 tint = mix(vec3(0.65, 0.78, 1.0), vec3(1.0, 0.78, 0.55), fract(n2 * 5.1));
-    col += tint * star * br * (0.5 - 0.08 * float(i));
+    col += vec3(0.7, 0.8, 1.0) * star * ((n - 0.8) / 0.2) * 0.5;
   }
   return col;
 }
 
-/** g = ν_obs/ν_em for equatorial Kerr circular orbit (Doppler × grav). */
-float gFactor(float r, vec3 hit, vec3 camPos) {
-  float om = 1.0 / (pow(max(r, 0.6), 1.5) + uSpin);
-  vec3 vdir = vec3(-om * hit.z, 0.0, om * hit.x);
-  float speed = clamp(length(vdir), 0.0, 0.9);
-  vdir = normalize(vdir + vec3(1e-4, 0.0, 0.0));
-  vec3 toObs = normalize(camPos - hit);
-  float cosA = dot(vdir, toObs);
-  float gamma = 1.0 / sqrt(max(1.0 - speed * speed, 1e-3));
-  float doppler = 1.0 / max(gamma * (1.0 - speed * cosA), 0.12);
-  float grav = sqrt(max(0.05, 1.0 - 3.0 / r + 2.0 * uSpin / pow(r, 1.5)));
-  return clamp(doppler * grav, 0.08, 3.5);
-}
-
-/**
- * Thin Keplerian disk — smooth shear (no moiré fingerprints).
- * I_obs = g³ I_em ; color shifts with g.
- */
-vec3 diskEmission(vec3 hit, vec3 camPos) {
-  float r = length(hit.xz);
-  float phi = atan(hit.z, hit.x);
-  float rIn = rIsco();
-  float rOut = 14.5;
-  if (r < rIn - 0.15 || r > rOut) return vec3(0.0);
-
-  float om = 1.0 / (pow(max(r, 0.6), 1.5) + uSpin);
-  float ang = phi - uTime * uTimeScale * om * 8.0;
-  // smooth shear filaments
-  float sp = ang + log(max(r, 0.5)) * 1.0;
-  float f1 = 0.5 + 0.5 * sin(sp * 2.5);
-  float f2 = 0.5 + 0.5 * sin(sp * 1.2 + r * 0.25);
-  float turb = 0.55 + 0.35 * f1 * f2 + 0.15 * f1;
-
-  // --- relativistic g (Doppler × gravitational redshift) ---
-  float g = gFactor(r, hit, camPos);
-
-  float t = clamp((r - rIn) / (rOut - rIn), 0.0, 1.0);
-  // thin disk profile, sharp inner rim
-  float radial = exp(-t * 3.2) * smoothstep(rIn, rIn + 0.12, r);
-  radial *= 1.0 - smoothstep(rOut - 1.8, rOut, r);
-
-  // temperature: white-hot inner → gold → deep red outer
-  float temp = clamp(pow(max(rIn / r, 0.05), 0.75), 0.0, 1.0);
-
-  // I_obs = g³ I_em  (relativistic beaming)
-  float beam = pow(clamp(g, 0.35, 2.6), 2.4); // 背侧不过暗，整圈盘可见
-  float inten = turb * radial * beam * (0.55 + 0.85 * temp);
-  // inner rim blaze
-  inten += exp(-abs(r - rIn) * 3.5) * 1.4 * beam;
-  // photon-ring neighborhood boost
-  inten += exp(-abs(r - 3.0) * 1.2) * 0.35 * beam;
-
-  // cinematic color: approaching (g>1) → blinding cream-white
-  //                 receding  (g<1) → deep ember red
-  //                 strong grav (inner) → orange-red shift
-  vec3 hotWhite = vec3(1.0, 0.98, 0.92);
-  vec3 gold     = vec3(1.0, 0.72, 0.28);
-  vec3 ember    = vec3(0.85, 0.18, 0.05);
-  vec3 deepRed  = vec3(0.45, 0.05, 0.02);
-
-  vec3 col = mix(ember, gold, clamp(temp * 1.2, 0.0, 1.0));
-  col = mix(col, hotWhite, smoothstep(1.05, 1.8, g) * 0.85);
-  col = mix(col, deepRed, smoothstep(0.85, 0.35, g) * 0.75);
-  // gravitational redshift near hole
-  col = mix(col, deepRed, (1.0 - clamp(g, 0.0, 1.0)) * 0.45 * (1.0 - temp));
-
-  return col * inten * 7.5;
-}
-
-vec3 gridGlow(vec3 p) {
-  if (!uShowGrid) return vec3(0.0);
-  float r = length(p);
-  if (r > 18.0) return vec3(0.0);
-  float rings = abs(fract(r * 0.4) - 0.5);
-  float lats = abs(fract(p.y * 0.4) - 0.5);
-  float line = smoothstep(0.07, 0.0, min(rings, lats));
-  float ph = atan(p.z, p.x);
-  float twist = 0.5 + 0.5 * sin(ph * 2.0 - r * 0.3 + uTime * 0.2 * uSpin);
-  return vec3(0.1, 0.75, 1.0) * line * exp(-r * 0.12) * (0.2 + 0.3 * twist);
+// ACES approx
+vec3 aces(vec3 x) {
+  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
 
 void main() {
   vec2 uv = vUv * 2.0 - 1.0;
   uv.x *= uResolution.x / uResolution.y;
-
   float tanF = tan(uFov * 0.5);
-  vec3 dir = normalize(uCamBasis[2] + uCamBasis[0] * (uv.x * tanF) + uCamBasis[1] * (uv.y * tanF));
+  vec3 dirW = normalize(uCamBasis[2] + uCamBasis[0] * (uv.x * tanF) + uCamBasis[1] * (uv.y * tanF));
 
-  vec3 pos = uCamPos;
-  vec3 vel = dir;
+  // Cartesian → BL
+  vec3 p = uCamPos;
+  float r0 = max(length(p), 2.0);
+  float th0 = acos(clamp(p.y / r0, -1.0, 1.0));
+  float ph0 = atan(p.z, p.x);
 
-  float capture = rPlus() * 1.05;
+  // local orthonormal triad (approx spherical)
+  vec3 er = normalize(p + 1e-6);
+  vec3 upRef = abs(er.y) > 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+  vec3 eph = normalize(cross(upRef, er));
+  vec3 eth = normalize(cross(er, eph));
+  vec3 n = normalize(vec3(dot(dirW, er), dot(dirW, eth), dot(dirW, eph)));
 
-  float ci = cos(-uIncl);
-  float si = sin(-uIncl);
-  mat3 rotX = mat3(1.0, 0.0, 0.0,  0.0, ci, si,  0.0, -si, ci);
+  // geodesics use -a (time-reversed rays, CuplexUser); disk uses +a
+  float aG = -clamp(uSpin, -0.998, 0.998);
+  float aD = clamp(uSpin, 0.0, 0.998);
+
+  // initial (r,th,pr,pth), E=1, Lz from local angular momentum
+  float S0 = sigmaF(r0, th0, aG);
+  float D0 = max(deltaF(r0, aG), 1e-3);
+  float pr0 = n.x * sqrt(S0 / D0) * D0; // rough: p_r = g_rr dr/dλ
+  float pth0 = n.y * S0 / max(r0, 1.0);
+  float s0 = max(abs(sin(th0)), 1e-3);
+  float Lz = n.z * r0 * s0 + aG * 0.3;
+  float E = 1.0;
+
+  vec4 st = vec4(r0, th0, pr0, pth0);
+  float ph = ph0;
 
   vec3 col = vec3(0.0);
   vec3 frontDisk = vec3(0.0);
+  float vol = 0.0;
+  vec3 volCol = vec3(0.0);
   bool captured = false;
   bool escaped = false;
-  int hitCount = 0;
-  float minR = 1e5;
-
+  int hits = 0;
   int steps = int(clamp(uSteps, 32.0, 128.0));
+  float rh = rPlus(aG);
 
   for (int i = 0; i < 128; i++) {
     if (i >= steps) break;
+    float r = st.x;
+    float th = clamp(st.y, 1e-3, PI - 1e-3);
+    if (r < rh * 1.02) { captured = true; break; }
+    if (r > 65.0 && i > 3) { escaped = true; break; }
 
-    float r = length(pos);
-    minR = min(minR, r);
-    if (r < capture) {
-      captured = true;
-      break;
+    float dl = clamp(r * 0.045, 0.015, 0.9);
+
+    vec3 cart = vec3(r * sin(th) * cos(ph), r * cos(th), r * sin(th) * sin(ph));
+
+    // volumetric thick disk sample (puff around equator)
+    float cylR = length(cart.xz);
+    float rInV = rIsco(aD) * 0.95;
+    if (cylR > rInV && cylR < 13.0 && abs(cart.y) < 3.0) {
+      float H = 0.14 * cylR + 0.3;
+      float dens = exp(-pow(cart.y / H, 2.0)) *
+                   exp(-pow((cylR - rInV) / 11.0, 1.4) * 2.2);
+      vec3 hitEq = vec3(cart.x, 0.0, cart.z);
+      float g = gDisk(cylR, hitEq, uCamPos, aD);
+      vec3 c = diskShade(cylR, atan(cart.z, cart.x), hitEq, uCamPos, aD);
+      volCol += c * dens * dl * 2.2;
     }
-    if (r > 70.0 && i > 2) {
-      escaped = true;
-      break;
-    }
 
-    float dt = clamp(r * 0.05, 0.03, 2.0);
-
-    // disk plane crossing
-    vec3 pD = rotX * pos;
-    vec3 vD = rotX * vel;
-    float y0 = pD.y;
-    float y1 = y0 + vD.y * dt;
-    if (i > 0 && y0 * y1 <= 0.0 && abs(y0 - y1) > 1e-6 && hitCount < 3) {
-      float s = clamp(y0 / (y0 - y1), 0.0, 1.0);
-      vec3 hitW = pos + vel * (dt * s);
-      if (length(hitW) > capture * 1.15) {
-        vec3 hitD = rotX * hitW;
-        // physical cylindrical radius in spin-aligned disk
-        col += diskEmission(vec3(hitW.x, 0.0, hitW.z), uCamPos);
-        hitCount++;
-        // also allow a secondary (lensed) contribution from disk-frame radius
-        float rD = length(hitD.xz);
-        if (abs(rD - length(hitW.xz)) > 0.5) {
-          // ignore — use world xz only
-        }
+    // thin-disk equator crossing
+    float y0 = cart.y;
+    // predict next y from RHS
+    float dphi;
+    vec4 k = rhs(st, E, Lz, aG, dphi);
+    vec4 st1 = st + k * dl;
+    float r1 = max(st1.x, 0.2);
+    float th1 = clamp(st1.y, 1e-3, PI - 1e-3);
+    float ph1 = ph + dphi * dl;
+    vec3 cart1 = vec3(r1 * sin(th1) * cos(ph1), r1 * cos(th1), r1 * sin(th1) * sin(ph1));
+    if (i > 0 && y0 * cart1.y < 0.0 && hits < 3) {
+      float s = clamp(y0 / (y0 - cart1.y + 1e-8), 0.0, 1.0);
+      vec3 hitW = mix(cart, cart1, s);
+      float rhit = length(hitW.xz);
+      if (rhit > rh * 1.05) {
+        vec3 em = diskShade(rhit, atan(hitW.z, hitW.x), vec3(hitW.x, 0.0, hitW.z), uCamPos, aD);
+        col += em;
+        if (hits == 0) frontDisk = em;
+        hits++;
       }
     }
 
-    // ---- 立体厚盘（气环/圆环体积）：沿光线累积，洞周围处处有物质 ----
-    {
-      float cylR = length(pos.xz);
-      float rInV = rIsco() * 0.9;
-      float rOutV = 13.0;
-      if (cylR > rInV && cylR < rOutV && abs(pos.y) < 2.5) {
-        // flared scale height H ∝ r
-        float H = 0.12 * cylR + 0.25;
-        float dens = exp(-pow(pos.y / H, 2.0)) * exp(-pow((cylR - rInV) / (rOutV - rInV), 1.5) * 2.5);
-        float gL = gFactor(cylR, vec3(pos.x, 0.0, pos.z), uCamPos);
-        float beamL = pow(clamp(gL, 0.3, 2.6), 2.4);
-        float tempL = clamp(pow(max(rInV / cylR, 0.05), 0.75), 0.0, 1.0);
-        vec3 cL = mix(vec3(0.7, 0.15, 0.04), vec3(1.0, 0.7, 0.3), tempL);
-        cL = mix(cL, vec3(1.0, 0.98, 0.9), smoothstep(1.0, 1.6, gL));
-        // shear streaks
-        float phiL = atan(pos.z, pos.x);
-        float omL = 1.0 / (pow(max(cylR, 0.6), 1.5) + uSpin);
-        float streak = 0.65 + 0.35 * sin(phiL - uTime * uTimeScale * omL * 6.0 + log(max(cylR,1.0)) * 2.0);
-        col += cL * dens * beamL * streak * dt * 4.5;
-      }
-    }
-
-    col += gridGlow(pos);
-
-    // null geodesic: Schwarzschild exact spatial form + Kerr frame dragging
-    vec3 hvec = cross(pos, vel);
-    float h2 = dot(hvec, hvec);
-    float rr = max(r, 0.4);
-    vec3 acc = -1.5 * h2 * pos / (rr * rr * rr * rr * rr);
-
-    vec3 sAxis = vec3(0.0, 1.0, 0.0);
-    vec3 rhat = pos / rr;
-    vec3 Bg = (2.0 * uSpin / (rr * rr * rr)) * (3.0 * dot(sAxis, rhat) * rhat - sAxis);
-    acc += 2.0 * cross(vel, Bg);
-
-    // Heun
-    vec3 a1 = acc;
-    vec3 p2 = pos + vel * dt;
-    vec3 v2 = vel + a1 * dt;
-    float r2 = max(length(p2), 0.4);
-    vec3 h2b = cross(p2, v2);
-    float hh = dot(h2b, h2b);
-    vec3 a2 = -1.5 * hh * p2 / (r2 * r2 * r2 * r2 * r2);
-    vec3 rh2 = p2 / r2;
-    vec3 Bg2 = (2.0 * uSpin / (r2 * r2 * r2)) * (3.0 * dot(sAxis, rh2) * rh2 - sAxis);
-    a2 += 2.0 * cross(v2, Bg2);
-
-    pos += 0.5 * (vel + v2) * dt;
-    vel += 0.5 * (a1 + a2) * dt;
-    float sp = length(vel);
-    if (sp > 1e-5) vel *= 1.0 / sp;
+    // RK4
+    float dphi1;
+    vec4 k1 = rhs(st, E, Lz, aG, dphi1);
+    vec4 s2v = st + 0.5 * dl * k1;
+    float dphi2;
+    vec4 k2 = rhs(s2v, E, Lz, aG, dphi2);
+    vec4 s3v = st + 0.5 * dl * k2;
+    float dphi3;
+    vec4 k3 = rhs(s3v, E, Lz, aG, dphi3);
+    vec4 s4v = st + dl * k3;
+    float dphi4;
+    vec4 k4 = rhs(s4v, E, Lz, aG, dphi4);
+    st += (dl / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
+    ph += (dl / 6.0) * (dphi1 + 2.0 * dphi2 + 2.0 * dphi3 + dphi4);
+    st.x = max(st.x, 0.15);
+    st.y = clamp(st.y, 1e-3, PI - 1e-3);
+    if (!(st.x == st.x) || !(st.y == st.y) || abs(st.x) > 1e8) break;
   }
 
   if (!captured && !escaped) {
-    if (length(pos) < 12.0) captured = true;
+    if (st.x < 12.0) captured = true;
     else escaped = true;
   }
 
-  // ---------- Shadow (soft / 朦胧) ----------
-  // Keep any foreground disk hits so the near plate can wrap over the silhouette.
-  vec3 disk = col;
-  vec3 sky = (escaped) ? starfield(normalize(pos)) * 0.75 : vec3(0.0);
-
-  // 事件视界阴影：临界曲线内纯黑
-  // 光子环：贴着阴影外缘的厚软亮环（第一版观感）
-  // 其外：吸积盘 / 星空 —— 中间不允许出现灰黑空带
-  // Critical curve (needed by composite below)
-  vec3 bvec = cross(uCamPos, dir);
+  // critical curve (soft, for ring)
+  vec3 bvec = cross(uCamPos, dirW);
   float bImp = length(bvec);
-  vec3 toB = normalize(-uCamPos);
-  vec3 dperp = dir - toB * dot(dir, toB);
-  float soAng = atan(dot(dperp, uCamBasis[1]), dot(dperp, uCamBasis[0]));
-  float spAng = atan(dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]),
-                     dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]));
-  float aS = clamp(uSpin, 0.0, 0.998);
-  // Kerr critical curve (Bardeen+ 1972; Johannsen 2013; Gralla–Holz–Wald 2019):
-  // a nearly circular closed curve — one side gently flattened & the center
-  // offset with spin+inclination. NOT a letter-D chord cut, NOT a hard ellipse.
-  float rel = soAng - spAng;
-  float a2 = aS * aS;
-  float R0 = 3.0 * sqrt(3.0); // 5.196
-  // mild egg/D: r(φ) = R0 (1 + c1 a cos φ + c2 a² cos 2φ), c1²<1 ⇒ smooth convex
-  // Johannsen 2013: Kerr 光子环几乎正圆，仅极高速自旋才明显不对称；
-  // 形变与偏移 ∝ a·sin(inclination)。正视 (spin∥view) 时 spLen≈0 → 圆。
-  float spx = dot(vec3(0.0, 1.0, 0.0), uCamBasis[0]);
-  float spy = dot(vec3(0.0, 1.0, 0.0), uCamBasis[1]);
-  float spLen = clamp(length(vec2(spx, spy)), 0.0, 1.0); // 0=正视, 1=侧视
-  float deform = aS * spLen;
-  float rC = R0 * (1.0 - 0.015 * a2)
-           * (1.0 + 0.14 * deform * cos(rel) + 0.03 * deform * cos(2.0 * rel));
-  bool inside = bImp < rC;
-  // normalized residual for the ring (0 on the critical curve)
-  float dSdf = bImp - rC;
-  float bCrit = rC;
-  float ell = 1.0;
+  float R0 = 3.0 * sqrt(3.0);
+  float ring = exp(-pow((bImp - R0 * (1.0 - 0.02 * uSpin * uSpin)) / 0.5, 2.0));
 
-  float ring = exp(-pow(dSdf / 0.45, 2.0));
-  float ringCore = exp(-pow(dSdf / 0.1, 2.0));
-  vec3 ringCol = mix(vec3(1.0, 0.9, 0.72), vec3(1.0, 0.98, 0.92), ringCore);
-
-  if (inside) {
-    // 近侧盘亮带（Luminet）：加宽柔化，与环外盘在轮廓处衔接
-    vec3 plate = frontDisk * 1.6;
-    // 底部更亮、中心稍淡，避免细线感
-    float vUp = clamp(dot(normalize(dir - toB * dot(dir, toB)), uCamBasis[1]), -1.0, 1.0);
-    float band = smoothstep(0.55, -0.4, vUp);
-    col = plate * (0.35 + 0.75 * band);
-    col += ringCol * ring * 0.85;
+  if (captured) {
+    col = frontDisk * 0.9 + volCol * 0.5;
   } else {
-    col = disk + sky;
-    col += ringCol * (ring * 2.5 + ringCore * 1.7);
+    vec3 sky = starfield(normalize(vec3(sin(st.y) * cos(ph), cos(st.y), sin(st.y) * sin(ph))));
+    col += sky * 0.8 + volCol;
+    col += vec3(1.0, 0.93, 0.75) * ring * 1.8;
   }
-
-  vec2 q = vUv - 0.5;
-  col *= 1.0 - 0.08 * dot(q, q);
+  // soft bloom hint
+  col += vec3(0.55, 0.4, 0.25) * exp(-pow((bImp - R0) / 1.2, 2.0)) * 0.08;
 
   col = max(col, 0.0);
-  col = col / (1.0 + col);
+  col = aces(col * 1.1);
   col = pow(col, vec3(0.4545));
   gl_FragColor = vec4(col, 1.0);
 }
