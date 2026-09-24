@@ -122,6 +122,18 @@ vec3 starfield(vec3 dir) {
   return col;
 }
 
+vec3 gridGlow(vec3 p) {
+  if (!uShowGrid) return vec3(0.0);
+  float r = length(p);
+  if (r > 18.0) return vec3(0.0);
+  float rings = abs(fract(r * 0.4) - 0.5);
+  float lats = abs(fract(p.y * 0.4) - 0.5);
+  float line = smoothstep(0.07, 0.0, min(rings, lats));
+  float ph = atan(p.z, p.x);
+  float twist = 0.5 + 0.5 * sin(ph * 2.0 - r * 0.3 + uTime * 0.25 * uSpin);
+  return vec3(0.1, 0.75, 1.0) * line * exp(-r * 0.12) * (0.2 + 0.3 * twist);
+}
+
 vec3 aces(vec3 x) {
   return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
 }
@@ -176,6 +188,7 @@ void main() {
       }
     }
     prevY = y1;
+    col += gridGlow(pos) * 0.35;
 
     // null geodesic: Schwarzschild form + Kerr frame dragging
     vec3 hvec = cross(pos, vel);
